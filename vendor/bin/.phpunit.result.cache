@@ -1,0 +1,1 @@
+{"version":2,"defects":{"DecisionEngineTest::testHumanReviewWhenPartialMatch":7},"times":{"DecisionEngineTest::testAcceptWhenLabelAndPriceMatch":0.003,"DecisionEngineTest::testRefuseWhenPriceMismatch":0.003,"DecisionEngineTest::testHumanReviewWhenPartialMatch":0.004,"AgentTest::testSynonymMatching":0.143}}

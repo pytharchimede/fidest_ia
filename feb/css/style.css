@@ -1,0 +1,467 @@
+/* Style général */
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f0f2f5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 800px;
+    position: relative;
+    transition: all 0.3s;
+}
+
+/* Jauge de progression */
+.progress-bar {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.progress {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 0;
+    height: 4px;
+    background-color: #007bff;
+    z-index: 1;
+    transition: width 0.3s ease;
+}
+
+.step-indicator {
+    background-color: #e0e0e0;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 20px;
+    color: #fff;
+    z-index: 2;
+    position: relative;
+}
+
+.step-indicator.active {
+    background-color: #007bff;
+}
+
+/* Modifier le titre principal */
+h1 {
+    text-align: center;
+    margin-bottom: 10px; /* Réduire l'espacement en bas */
+    font-weight: 400; /* Rendre le texte plus léger */
+    font-size: 24px; /* Réduire la taille de la police */
+    color: #555; /* Changer la couleur pour la rendre moins prononcée */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+h1 i {
+    margin-right: 10px;
+}
+
+.step {
+    max-width: 100%; /* S'assurer que le conteneur occupe toute la largeur disponible */
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* Titre de chaque section */
+.step h1 {
+    font-size: 28px; /* Augmenter la taille des titres de section */
+    font-weight: 600; /* Rendre les titres de section plus gras */
+    color: #333;
+    margin-bottom: 30px; /* Ajouter de l'espace en dessous */
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.step h1 i {
+    margin-right: 10px;
+}
+
+/* Style des champs */
+.form-group {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 5px;
+    font-size: 18px;
+}
+
+input, textarea, select {
+    width: 100%;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+    background-color: #f9f9f9;
+    outline: none;
+    transition: all 0.3s;
+}
+
+input:focus, textarea:focus, select:focus {
+    border-color: #007bff;
+    background-color: #fff;
+}
+
+textarea {
+    resize: vertical;
+}
+
+/* Boutons de navigation */
+.nav-btn {
+    padding: 15px 30px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-right: 10px;
+    font-size: 16px;
+    transition: background-color 0.3s;
+}
+
+.nav-btn:hover {
+    background-color: #0056b3;
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    background-color: #28a745;
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 18px;
+    transition: background-color 0.3s;
+}
+
+.submit-btn:hover {
+    background-color: #218838;
+}
+
+
+/* Style pour les champs dupliqués */
+.besoin-item {
+    background-color: #f9f9f9;
+    padding: 20px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    position: relative;
+    box-sizing: border-box;
+}
+
+/* Ajuster la largeur des champs pour éviter le débordement */
+.besoin-item .form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 15px;
+}
+
+.besoin-item input, .besoin-item select {
+    width: 100%;
+    box-sizing: border-box; /* Inclut les bordures et le padding dans la largeur totale */
+}
+
+/* Assurer que les champs ne dépassent pas */
+.besoin-item input[type="text"],
+.besoin-item input[type="number"],
+.besoin-item select {
+    width: calc(100% - 20px); /* Réduit légèrement la largeur pour éviter le débordement */
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+/* Bouton pour ajouter un besoin */
+.add-btn {
+    padding: 10px 20px;
+    background-color: #007bff;
+    color: white;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease;
+}
+
+.add-btn i {
+    margin-right: 5px;
+}
+
+.add-btn:hover {
+    background-color: #0056b3;
+}
+
+/* Bouton pour supprimer un besoin */
+.remove-btn {
+    padding: 5px 10px;
+    background-color: #dc3545;
+    color: white;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s ease;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+}
+
+.remove-btn:hover {
+    background-color: #c82333;
+}
+
+/* Style pour le switch */
+.switch-box {
+    display: flex;
+    align-items: center;
+}
+
+.switch-input {
+    display: none;
+}
+
+.switch-label {
+    position: relative;
+    width: 50px;
+    height: 25px;
+    background-color: #dc3545;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.switch-inner {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background-color: #28a745;
+    border-radius: 50px;
+    transition: background-color 0.3s ease;
+}
+
+.switch-button {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 21px;
+    height: 21px;
+    background-color: white;
+    border-radius: 50%;
+    transition: left 0.3s ease;
+}
+
+.switch-input:checked + .switch-label .switch-inner {
+    background-color: #28a745; /* Couleur pour Oui */
+}
+
+.switch-input:checked + .switch-label .switch-button {
+    left: 26px;
+}
+
+.switch-status {
+    margin-left: 10px;
+    font-size: 14px;
+}
+
+/* Couleur par défaut */
+.switch-input:not(:checked) + .switch-label .switch-inner {
+    background-color: #dc3545; /* Couleur pour Non */
+}
+
+.switch-input:not(:checked) + .switch-label + .switch-status {
+    content: 'Non';
+}
+.switch-input:checked + .switch-label + .switch-status {
+    content: 'Oui';
+}
+
+/* #fournisseur-details {
+    display: none;
+} */
+
+
+#addBesoinBtn {
+    background-color: #4caf50; /* Vert doux */
+    color: white;
+    border: none;
+    padding: 12px 24px; /* Taille du bouton */
+    font-size: 16px;
+    border-radius: 8px; /* Bords arrondis */
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.3s ease; /* Effet smooth */
+    display: block; /* Pour le centrer */
+    margin: 20px auto; /* Espacement et centrage */
+  }
+  
+  #addBesoinBtn:hover {
+    background-color: #45a049; /* Couleur légèrement différente au survol */
+    transform: scale(1.05); /* Agrandissement léger au survol */
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+}
+
+.dropzone {
+    border: 2px dashed #ccc;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    background-color: #f9f9f9;
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.dropzone:hover {
+    background-color: #e9ecef;
+}
+
+.dropzone i {
+    font-size: 48px;
+    color: #007bff;
+}
+
+.dropzone p {
+    font-size: 16px;
+    color: #6c757d;
+    margin-top: 10px;
+}
+
+.hidden-input {
+    display: none;
+}
+
+#file-list {
+    margin-top: 10px;
+}
+
+#file-list p {
+    font-size: 14px;
+    color: #495057;
+}
+
+.form-text {
+    font-size: 14px;
+    color: #ff9800; /* Orange */
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+}
+
+.form-text i {
+    margin-right: 5px;
+    color: #ff9800; /* Orange */
+}
+
+.select2-container--default .select2-selection--single {
+    height: 45px; /* Ajuste la hauteur du champ select */
+    padding: 8px;
+    border-radius: 8px;
+    border-color: #ced4da;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 28px;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 45px;
+}
+
+#file-dropzone {
+    border: 2px dashed #ccc;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    background-color: #f9f9f9;
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+#file-dropzone:hover {
+    background-color: #e9ecef;
+}
+
+#file-dropzone i {
+    font-size: 48px;
+    color: #007bff;
+}
+
+#file-dropzone p {
+    font-size: 16px;
+    color: #6c757d;
+    margin-top: 10px;
+}
+
+.hidden-input {
+    display: none;
+}
+
+#preview-container .preview-item {
+    display: inline-block;
+    position: relative;
+    margin: 10px;
+    width: 100px;
+    height: 100px;
+    text-align: center;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+#preview-container .preview-item img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: cover;
+}
+
+#preview-container .progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 5px;
+    background-color: #28a745;
+    transition: width 0.4s ease;
+}
+
+#preview-container .progress-text {
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+
+.file-name {
+    font-size: 12px;
+    color: #333;
+    text-align: center;
+    margin-top: 5px;
+    word-wrap: break-word;
+}
