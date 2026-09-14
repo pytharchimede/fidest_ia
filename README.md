@@ -1,51 +1,86 @@
 # FIDEST IA
 
-Service de contrôle documentaire pour applications internes FIDEST.
+Plateforme de contrôle, typage, extraction et validation documentaire pour les applications internes FIDEST.
 
 ## Architecture
 
-- `app/Core` : infrastructure bas niveau
+- `app/Core` : infrastructure, environnement, base de données et migrations
 - `app/Contracts` : interfaces
 - `app/Repositories` : accès aux données
-- `app/Services` : OCR, extraction, validation, stockage
-- `database/migrations` : schéma SQL et règles initiales
+- `app/Services` : OCR, typage, extraction, validation, stockage et exports
+- `database/migrations` : schéma SQL, catalogue documentaire et règles
 - `public` : interface web et endpoints API
 - `storage/documents` : copies des documents analysés
-- `config` : configuration locale non versionnée
+- `.env` : configuration locale non versionnée
 
-## Installation
+## Installation locale
 
 1. `composer install`
-2. Copier `config/app.example.php` vers `config/app.php`.
-3. Renseigner le mot de passe MySQL uniquement dans `config/app.php`.
-4. Importer `database/migrations/001_create_document_ai_tables.sql` dans `fidestci_ia_db`.
-5. Vérifier `tesseract --version` et installer les langues `fra` et `eng` si le serveur le permet.
-6. Pointer le DocumentRoot du sous-domaine vers `public/`.
-7. Rendre `storage/documents` inscriptible par PHP.
+2. `cp .env.example .env`
+3. Renseigner les accès MySQL dans `.env`.
+4. Installer Tesseract et les langues `fra` et `eng`.
+5. Ouvrir l’application : les migrations SQL en attente sont appliquées automatiquement si `AUTO_MIGRATE=true`.
+
+Commande manuelle disponible :
+
+```bash
+php scripts/migrate.php
+```
+
+## Migrations automatiques
+
+FIDEST IA crée une table `schema_migrations` et exécute une seule fois chaque fichier `database/migrations/*.sql` non encore enregistré.
+
+Le mécanisme est déclenché par `bootstrap.php`, ce qui permet à une mise en ligne par Git Deploy ou `git pull` d’appliquer les changements de base au premier chargement de l’application.
+
+Variable d’environnement :
+
+```dotenv
+AUTO_MIGRATE=true
+```
+
+En production, les migrations doivent rester idempotentes. Ne jamais modifier une migration déjà livrée : ajouter une nouvelle migration numérotée.
+
+## Catalogue documentaire ivoirien
+
+Le catalogue initial couvre notamment :
+
+- identité et état civil : CNI, attestation d’identité, certificat de résidence, carte de résident, passeport, actes de naissance, mariage et décès ;
+- justice : certificat de nationalité, casier judiciaire bulletin n°3, déclaration de perte ;
+- entreprise : RCCM, statuts, DSV, PV d’assemblée, bail, procuration ;
+- fiscalité : DFE, attestations fiscales, régularité fiscale, patente, avis d’imposition, FNE ;
+- CNPS : immatriculation, déclaration travailleur/employeur, DISA, cessation d’emploi, accident du travail ;
+- emploi : attestation de travail, certificat de travail, bulletin de paie ;
+- transport : carte grise, visite technique, assurance automobile, permis de conduire ;
+- banque et justificatifs : RIB, facture CIE, facture SODECI, attestation d’hébergement ;
+- éducation et santé : certificat de scolarité, diplôme/attestation de réussite, certificat médical ;
+- documents commerciaux : bon de commande, bon de livraison, devis, reçu.
+
+Ces types servent au typage et à l’extraction. Ils ne constituent pas une certification de validité juridique du document.
 
 ## API
 
 `POST /api/documents/analyze.php`
 
-Multipart fields:
+Multipart fields :
 
-- `document`: fichier à analyser
-- `document_type`: `FNE_INVOICE` ou `PURCHASE_ORDER`
-- `client_reference`: optionnel
+- `document` : fichier à analyser
+- `document_type` : `AUTO`, `GENERAL` ou le code d’un type configuré
+- `client_reference` : optionnel
 
-La réponse JSON contient le texte OCR, les champs extraits, le statut global et le détail des contrôles.
+La réponse JSON contient le type détecté, le texte OCR, les champs extraits, le statut et le détail des contrôles.
 
 ## Règles initiales
 
 - Facture FNE : `invoice_number` doit être unique globalement.
 - Bon de commande : `order_number` doit être unique pour un même `client_name`.
 
-Les règles sont stockées dans `validation_rules` afin de pouvoir être paramétrées sans modifier le moteur.
+Les règles sont stockées dans `validation_rules` et peuvent être enrichies sans modifier le moteur.
 
 ## OCR
 
-Le moteur par défaut est Tesseract OCR, open source. L'interface `OcrEngineInterface` permet d'ajouter plus tard un autre moteur OCR local ou distant sans modifier le workflow métier.
+Le moteur par défaut est Tesseract OCR, open source. L’interface `OcrEngineInterface` permet de brancher ultérieurement un autre moteur local ou distant.
 
 ## Sécurité
 
-Ne jamais versionner `config/app.php`, mots de passe BDD, clés API ou secrets. Les fichiers sont renommés aléatoirement et leur SHA-256 est enregistré en base.
+Ne jamais versionner `.env`, mots de passe BDD, clés API ou secrets. Les fichiers sont renommés aléatoirement et leur SHA-256 est enregistré en base.
