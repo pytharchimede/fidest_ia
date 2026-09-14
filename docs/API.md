@@ -1,110 +1,100 @@
-# FIDEST IA — API de contrôle documentaire
+# FIDEST IA — API v1 de contrôle documentaire
 
-Cette documentation décrit l'API HTTP permettant à FINEA, IFMAP, LBP ou toute autre application d'envoyer un document à FIDEST IA pour OCR, typage, extraction et validation.
+FIDEST IA expose une API HTTP versionnée permettant à FINEA, IFMAP, LBP ou toute autre application autorisée d'envoyer des documents pour OCR, typage, extraction et validation.
 
-## URL de base
-
-En production, remplacez `https://ia.fidest.ci` par l'URL réelle de l'installation.
+## Base URL
 
 ```text
-https://ia.fidest.ci/api
+https://votre-domaine.tld/api/v1
 ```
 
-En installation sous-dossier :
+Si FIDEST IA est installé dans un sous-dossier :
 
 ```text
-https://example.com/fidest_ia/api
+https://votre-domaine.tld/fidest_ia/api/v1
 ```
 
-## 1. Analyser et contrôler un document
+Aucune route publique v1 ne contient `.php`.
 
-### Endpoint
+## Authentification
+
+Toutes les routes v1 exigent :
 
 ```http
-POST /documents/analyze.php
+Authorization: Bearer VOTRE_JETON_API
+Accept: application/json
+```
+
+Le jeton est défini côté serveur avec `API_BEARER_TOKEN`. Il ne doit jamais être placé dans du JavaScript livré au navigateur. Pour FINEA, privilégier un appel PHP serveur-à-serveur.
+
+## Routes
+
+| Méthode | Route | Fonction |
+|---|---|---|
+| `POST` | `/documents/analyze` | OCR, classification, extraction et contrôle d'un document |
+| `GET` | `/document-types` | Liste des types documentaires disponibles |
+| `POST` | `/document-types` | Création d'un type documentaire |
+| `GET` | `/health` | Vérification de disponibilité de l'API |
+
+## Analyser un document
+
+```http
+POST /api/v1/documents/analyze
+Authorization: Bearer ...
 Content-Type: multipart/form-data
 ```
 
-### Champs multipart
+Champs :
 
-| Champ | Obligatoire | Description |
-|---|---:|---|
-| `document` | oui | Fichier à analyser. Images et PDF selon les capacités OCR du serveur. |
-| `document_type` | non | `AUTO` par défaut, `GENERAL`, ou le code d'un type documentaire existant. |
-| `client_reference` | non | Référence libre provenant de l'application appelante : dossier, client, FEB, commande, etc. |
+- `document` : obligatoire ; fichier à analyser.
+- `document_type` : facultatif ; `AUTO` par défaut, `GENERAL` ou code explicite.
+- `client_reference` : facultatif ; identifiant du dossier dans l'application appelante.
 
-### Modes de typage
-
-- `AUTO` : FIDEST IA OCRise le document puis tente de déterminer son type.
-- `GENERAL` : aucun typage spécialisé ; restitution OCR générique.
-- code explicite, par exemple `FNE_INVOICE` : force l'analyse avec ce type.
-
-### Exemple cURL
-
-```bash
-curl -X POST 'https://ia.fidest.ci/api/documents/analyze.php' \
-  -F 'document=@/chemin/facture.pdf' \
-  -F 'document_type=AUTO' \
-  -F 'client_reference=FEB-2026-00125'
-```
-
-### Exemple PHP
+### PHP / FINEA
 
 ```php
-<?php
+$endpoint = 'https://ia.example.com/api/v1/documents/analyze';
+$token = getenv('FIDEST_IA_API_TOKEN');
 
-$ch = curl_init('https://ia.fidest.ci/api/documents/analyze.php');
-
+$ch = curl_init($endpoint);
 curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_POSTFIELDS => [
-        'document' => new CURLFile('/chemin/facture.pdf'),
-        'document_type' => 'AUTO',
-        'client_reference' => 'FEB-2026-00125',
+    CURLOPT_HTTPHEADER => [
+        'Authorization: Bearer ' . $token,
+        'Accept: application/json',
     ],
+    CURLOPT_POSTFIELDS => [
+        'document' => new CURLFile($filePath),
+        'document_type' => 'AUTO',
+        'client_reference' => 'FEB-' . $febId,
+    ],
+    CURLOPT_CONNECTTIMEOUT => 10,
+    CURLOPT_TIMEOUT => 120,
 ]);
 
-$response = curl_exec($ch);
+$raw = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$error = curl_error($ch);
 curl_close($ch);
 
-$result = json_decode($response, true);
-
-if ($httpCode === 200 && ($result['success'] ?? false)) {
-    $type = $result['document_type']['code'] ?? null;
-    $valid = $result['validation']['valid'] ?? false;
-    $data = $result['data'] ?? [];
-}
-```
-
-### Exemple JavaScript
-
-```javascript
-const body = new FormData();
-body.append('document', file);
-body.append('document_type', 'AUTO');
-body.append('client_reference', 'DOSSIER-2026-001');
-
-const response = await fetch('https://ia.fidest.ci/api/documents/analyze.php', {
-  method: 'POST',
-  body
-});
-
-const result = await response.json();
-
-if (!result.success) {
-  throw new Error(result.error || 'Analyse impossible');
+if ($raw === false || $error !== '') {
+    throw new RuntimeException('FIDEST IA indisponible: ' . $error);
 }
 
-console.log(result.document_type);
-console.log(result.data);
-console.log(result.validation);
+$result = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+
+if ($httpCode !== 200 || !($result['success'] ?? false)) {
+    throw new RuntimeException($result['error'] ?? 'Contrôle documentaire impossible.');
+}
+
+$isValid = (bool) ($result['validation']['valid'] ?? false);
+$type = $result['document_type']['code'] ?? null;
+$data = $result['data'] ?? [];
+$uuid = $result['uuid'] ?? null;
 ```
 
-## Réponse d'analyse
-
-Exemple simplifié :
+## Exemple de réponse
 
 ```json
 {
@@ -133,9 +123,7 @@ Exemple simplifié :
     "confidence": null,
     "text": "..."
   },
-  "data": {
-    "invoice_number": "21185"
-  },
+  "data": {},
   "validation": {
     "valid": true,
     "results": []
@@ -143,57 +131,22 @@ Exemple simplifié :
 }
 ```
 
-### Champs à exploiter en priorité
+`success=true` signifie que la requête a été traitée techniquement. `validation.valid=true` signifie que les règles métier du type documentaire ont été satisfaites. Les deux notions ne doivent pas être confondues.
 
-- `success` : traitement technique réussi ou non.
-- `status` : `validated`, `rejected` ou `error` selon le traitement et les règles.
-- `uuid` : identifiant stable du document dans FIDEST IA.
-- `document_type.code` : type reconnu ou forcé.
-- `classification.score` : score du typage automatique lorsqu'il existe.
-- `classification.signals` : signaux ayant contribué au classement.
-- `classification.fallback_to_general` : vrai lorsque le moteur n'a pas trouvé un type suffisamment fiable.
-- `data` : données structurées extraites.
-- `validation.valid` : résultat global des règles métier.
-- `validation.results` : détail des contrôles appliqués.
-- `ocr.text` : texte OCR brut ; utile pour audit/recherche mais à éviter comme seule source de décision métier.
-- `file.sha256` : empreinte du fichier reçu.
+## Types documentaires
 
-## 2. Lister les types documentaires
+### Lister
 
 ```http
-GET /document-types/
+GET /api/v1/document-types
+Authorization: Bearer ...
 ```
 
-Exemple :
-
-```bash
-curl 'https://ia.fidest.ci/api/document-types/'
-```
-
-Réponse :
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "code": "GENERAL",
-      "name": "Document libre",
-      "description": "...",
-      "fields": [],
-      "keywords": []
-    }
-  ]
-}
-```
-
-Une application consommatrice peut utiliser cet endpoint pour alimenter automatiquement une liste de types sans recopier les codes dans son propre code source.
-
-## 3. Créer un type documentaire
+### Créer
 
 ```http
-POST /document-types/
+POST /api/v1/document-types
+Authorization: Bearer ...
 Content-Type: application/json
 ```
 
@@ -207,67 +160,42 @@ Content-Type: application/json
 }
 ```
 
-Le code est généré depuis le nom s'il est omis. `AUTO` et `GENERAL` sont réservés.
+## Health check
 
-## Intégration recommandée dans FINEA
-
-Pour un contrôle de pièce jointe, FINEA doit :
-
-1. recevoir le fichier utilisateur ;
-2. l'envoyer à FIDEST IA via `POST /documents/analyze.php` ;
-3. conserver au minimum `uuid`, `document_type.code`, `validation.valid`, `data` et éventuellement `sha256` ;
-4. appliquer sa propre décision métier en fonction du résultat ;
-5. conserver le JSON complet si un audit détaillé est nécessaire.
-
-Exemple :
-
-```php
-if (!($result['success'] ?? false)) {
-    // Erreur technique : ne pas considérer le document comme contrôlé.
-}
-
-if (($result['document_type']['code'] ?? '') !== 'FNE_INVOICE') {
-    // La pièce fournie n'est pas reconnue comme FNE.
-}
-
-if (!($result['validation']['valid'] ?? false)) {
-    // Le document a été analysé mais une règle de contrôle a échoué.
-}
+```http
+GET /api/v1/health
+Authorization: Bearer ...
 ```
 
-Ne confondez donc pas `success=true` avec `validation.valid=true` : le premier signifie que l'API a traité la requête, le second que les règles métier appliquées ont été satisfaites.
+## Codes HTTP
 
-## Codes HTTP actuels
+- `200` : requête réussie.
+- `201` : ressource créée.
+- `204` : requête `OPTIONS` CORS.
+- `401` : jeton absent ou invalide.
+- `404` : route inconnue.
+- `422` : document, données ou traitement invalides.
 
-- `200` : analyse terminée ou lecture des types réussie.
-- `201` : type documentaire créé.
-- `204` : réponse CORS OPTIONS sur l'endpoint d'analyse.
-- `405` : méthode HTTP non autorisée.
-- `422` : document/requête invalide ou erreur pendant l'analyse.
+## Configuration serveur
 
-Les consommateurs doivent toujours lire également `success` et `error` dans le JSON.
-
-## Formats et OCR
-
-Les images prises en charge dépendent de Tesseract et de la configuration serveur. Pour les PDF, l'installation actuelle utilise Poppler (`pdftoppm`) pour rasteriser les pages avant OCR Tesseract. Un serveur ne disposant pas de ces binaires ne pourra pas effectuer le même traitement PDF.
-
-La taille maximale est pilotée par `MAX_UPLOAD_MB` dans la configuration de FIDEST IA.
-
-## Sécurité — état actuel
-
-L'endpoint d'analyse annonce actuellement `X-API-Key` dans les en-têtes CORS, mais aucune authentification par clé n'est encore appliquée. L'endpoint de gestion des types n'est pas non plus authentifié.
-
-**Ne considérez donc pas l'API actuelle comme suffisamment sécurisée pour une exposition publique à des applications tierces non maîtrisées.** Avant ouverture Internet, ajouter des clés API par application, stockage hashé, scopes (`documents:analyze`, `types:read`, `types:write`), limitation de débit et restriction des origines autorisées.
-
-Pour des applications hébergées sur le même serveur, privilégier les appels serveur-à-serveur plutôt qu'un appel JavaScript depuis le navigateur.
-
-## Versionnement conseillé
-
-La prochaine évolution de l'API devrait introduire une URL versionnée :
-
-```text
-/api/v1/documents/analyze
-/api/v1/document-types
+```dotenv
+API_ENABLED=true
+API_BEARER_TOKEN=jeton-secret-long-et-aleatoire
+API_ALLOWED_ORIGINS=
 ```
 
-Cela permettra de faire évoluer FIDEST IA sans casser FINEA, IFMAP, LBP ou d'autres consommateurs existants.
+Pour une intégration PHP serveur-à-serveur comme FINEA, `API_ALLOWED_ORIGINS` peut rester vide : CORS concerne les navigateurs, pas les appels backend cURL.
+
+Ne versionnez jamais le jeton API dans Git. Dans l'application consommatrice, stockez également son jeton dans son propre `.env` ou gestionnaire de secrets.
+
+## Recommandation d'intégration
+
+Conserver dans l'application appelante au minimum :
+
+- `uuid` FIDEST IA ;
+- `document_type.code` ;
+- `validation.valid` ;
+- `data` ;
+- `file.sha256` si la traçabilité du fichier est nécessaire.
+
+Pour audit, conserver aussi la réponse JSON complète.
