@@ -13,6 +13,7 @@ final class DocumentAnalysisService
         private readonly DocumentStorageService $storage,
         private readonly OcrEngineInterface $ocr,
         private readonly DocumentExtractionService $extractor,
+        private readonly DocumentClassifierService $classifier,
         private readonly ValidationEngine $validator,
         private readonly DocumentRepository $documents,
         private readonly ValidationRuleRepository $rules
@@ -20,7 +21,11 @@ final class DocumentAnalysisService
 
     public function analyze(array $file, string $documentTypeCode, ?string $clientReference = null): array
     {
-        $type = $this->documents->findTypeByCode($documentTypeCode);
+        $auto = strtoupper($documentTypeCode) === 'AUTO';
+        $type = $auto
+            ? $this->documents->findTypeByCode('GENERAL')
+            : $this->documents->findTypeByCode($documentTypeCode);
+
         if (!$type) {
             throw new RuntimeException('Type de document inconnu ou inactif.');
         }
@@ -43,7 +48,24 @@ final class DocumentAnalysisService
 
         try {
             $ocr = $this->ocr->extract($stored['absolute_path'], $stored['mime_type']);
+
+            if ($auto) {
+                $detected = $this->classifier->classify($ocr['text'], $this->documents->allTypes(true));
+                if ($detected) {
+                    $type = $detected;
+                    $this->documents->updateDocumentType($documentId, (int) $type['id']);
+                }
+            }
+
             $data = $this->extractor->extract($ocr['text'], $type['code']);
+            if ($type['code'] === 'GENERAL') {
+                $data = [
+                    'title' => $this->firstUsefulLine($ocr['text']),
+                    'text_length' => mb_strlen($ocr['text']),
+                    'lines' => count(preg_split('/\R/u', trim($ocr['text'])) ?: []),
+                ];
+            }
+
             $rules = $this->rules->forDocumentType((int) $type['id']);
             $validation = $this->validator->validate((int) $type['id'], $data, $rules);
             $status = $validation['valid'] ? 'validated' : 'rejected';
@@ -66,6 +88,10 @@ final class DocumentAnalysisService
                 'document_id' => $documentId,
                 'uuid' => $uuid,
                 'status' => $status,
+                'classification' => [
+                    'automatic' => $auto,
+                    'score' => $type['classification_score'] ?? null,
+                ],
                 'document_type' => ['code' => $type['code'], 'name' => $type['name']],
                 'file' => [
                     'original_name' => $stored['original_name'],
@@ -85,6 +111,17 @@ final class DocumentAnalysisService
             $this->documents->updateAnalysis($documentId, '', [], 'error', null);
             throw $e;
         }
+    }
+
+    private function firstUsefulLine(string $text): ?string
+    {
+        foreach (preg_split('/\R/u', $text) ?: [] as $line) {
+            $line = trim($line);
+            if (mb_strlen($line) >= 3) {
+                return mb_substr($line, 0, 180);
+            }
+        }
+        return null;
     }
 
     private function uuidV4(): string
