@@ -1,15 +1,20 @@
 {
-  "name": "pytharchimede/fidest_ia-prototype",
-  "description": "Prototype API de vérification de justificatifs (OCR + règles + HF optional)",
+  "name": "pytharchimede/fidest-ia",
+  "description": "Service de contrôle documentaire OCR, extraction structurée et règles métier configurables",
+  "type": "project",
   "require": {
-    "php": ">=7.4",
-    "thiagoalessio/tesseract_ocr": "^2.9",
-    "wamania/php-stemmer": "^4.0"
+    "php": ">=8.2",
+    "ext-pdo": "*",
+    "ext-fileinfo": "*",
+    "thiagoalessio/tesseract_ocr": "^2.13"
   },
   "autoload": {
-    "psr-4": { "FidestIA\\": "src/" }
+    "psr-4": {
+      "FidestIA\\": "app/"
+    }
   },
-  "require-dev": {
-    "phpunit/phpunit": "^12.4"
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
   }
 }
