@@ -4,7 +4,7 @@ namespace FidestIA\Services;
 
 final class DocumentExtractionService
 {
-    public function extract(string $text, string $documentTypeCode): array
+    public function extract(string $text, string $documentTypeCode, array $schema = []): array
     {
         $clean = preg_replace('/[\t ]+/', ' ', $text) ?? $text;
         $data = [];
@@ -29,6 +29,20 @@ final class DocumentExtractionService
             $data[$field] = $this->labeledValue($clean, $field === 'client_name' ? ['client', 'destinataire'] : ['fournisseur', 'vendeur']);
         }
 
+        foreach (($schema['fields'] ?? []) as $field) {
+            $field = trim((string) $field);
+            if ($field === '' || array_key_exists($field, $data)) {
+                continue;
+            }
+
+            $labels = array_unique([
+                $field,
+                str_replace('_', ' ', $field),
+                str_replace(['_', '-'], ' ', mb_strtolower($field)),
+            ]);
+            $data[$field] = $this->labeledValue($clean, $labels);
+        }
+
         return array_filter($data, static fn ($value) => $value !== null && $value !== '');
     }
 
@@ -45,7 +59,7 @@ final class DocumentExtractionService
     private function labeledValue(string $text, array $labels): ?string
     {
         foreach ($labels as $label) {
-            if (preg_match('/' . preg_quote($label, '/') . '\s*[:\-]\s*([^\r\n]{2,120})/iu', $text, $m)) {
+            if (preg_match('/' . preg_quote($label, '/') . '\s*[:\-]\s*([^\r\n]{2,160})/iu', $text, $m)) {
                 return trim($m[1]);
             }
         }
