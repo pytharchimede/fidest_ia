@@ -5,9 +5,12 @@ DirectoryIndex index.php
     RewriteEngine On
 
     # Never expose application internals or secret/config files.
-    RewriteRule ^(?:app|config|database|storage|tests|vendor|scripts|src|data|feb)(?:/|$) - [F,L,NC]
+    RewriteRule ^(?:app|config|database|storage|tests|vendor|scripts|src|data|feb|docs)(?:/|$) - [F,L,NC]
     RewriteRule ^(?:\.env(?:\..*)?|composer\.(?:json|lock)|README(?:_PROTOTYPE)?\.md)$ - [F,L,NC]
 
-    # Keep the public API reachable while the project lives in /fidest_ia.
+    # Professional versioned API routes.
+    RewriteRule ^api/v1/(.*)$ public/api/v1/index.php?_route=$1 [L,QSA]
+
+    # Legacy API kept temporarily for backward compatibility.
     RewriteRule ^api/(.*)$ public/api/$1 [L,QSA]
 </IfModule>
