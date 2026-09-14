@@ -6,6 +6,7 @@ use FidestIA\Core\Database;
 use FidestIA\Repositories\DocumentRepository;
 use FidestIA\Repositories\ValidationRuleRepository;
 use FidestIA\Services\DocumentAnalysisService;
+use FidestIA\Services\DocumentClassifierService;
 use FidestIA\Services\DocumentExtractionService;
 use FidestIA\Services\DocumentStorageService;
 use FidestIA\Services\Ocr\TesseractOcrService;
@@ -35,9 +36,9 @@ try {
         throw new RuntimeException('Le champ document est requis.');
     }
 
-    $typeCode = trim((string) ($_POST['document_type'] ?? ''));
+    $typeCode = trim((string) ($_POST['document_type'] ?? 'AUTO'));
     if ($typeCode === '') {
-        throw new RuntimeException('Le champ document_type est requis.');
+        $typeCode = 'AUTO';
     }
 
     $maxUploadMb = (int) ($config['storage']['max_upload_mb'] ?? 15);
@@ -58,6 +59,7 @@ try {
             $config['ocr']['languages'] ?? 'fra+eng'
         ),
         new DocumentExtractionService(),
+        new DocumentClassifierService(),
         new ValidationEngine($documents),
         $documents,
         $rules
