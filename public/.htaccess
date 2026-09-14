@@ -1,0 +1,8 @@
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteRule ^api/v1/(.*)$ api/v1/index.php?_route=$1 [L,QSA]
+</IfModule>
