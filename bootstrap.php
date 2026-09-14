@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use FidestIA\Core\Database;
 use FidestIA\Core\Env;
+use FidestIA\Core\MigrationRunner;
 
 require __DIR__ . '/vendor/autoload.php';
 
@@ -13,12 +15,13 @@ if (!str_starts_with($documentsPath, '/')) {
     $documentsPath = __DIR__ . '/' . ltrim($documentsPath, '/');
 }
 
-return [
+$config = [
     'app' => [
         'name' => (string) Env::get('APP_NAME', 'FIDEST IA'),
         'env' => (string) Env::get('APP_ENV', 'production'),
         'debug' => Env::bool('APP_DEBUG', false),
         'url' => (string) Env::get('APP_URL', 'http://localhost/fidest_ia'),
+        'auto_migrate' => Env::bool('AUTO_MIGRATE', true),
     ],
     'database' => [
         'host' => (string) Env::get('DB_HOST', 'localhost'),
@@ -38,3 +41,10 @@ return [
         'max_upload_mb' => (int) Env::get('MAX_UPLOAD_MB', 15),
     ],
 ];
+
+if ($config['app']['auto_migrate'] && $config['database']['name'] !== '') {
+    $db = Database::connection($config);
+    (new MigrationRunner($db, __DIR__ . '/database/migrations'))->run();
+}
+
+return $config;
