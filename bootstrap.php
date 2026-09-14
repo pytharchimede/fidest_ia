@@ -25,6 +25,9 @@ $config = [
         'auto_migrate' => Env::bool('AUTO_MIGRATE', true),
         'auto_bootstrap' => Env::bool('AUTO_BOOTSTRAP', true),
     ],
+    'admin' => [
+        'token' => (string) Env::get('ADMIN_TOKEN', ''),
+    ],
     'api' => [
         'enabled' => Env::bool('API_ENABLED', true),
         'bearer_token' => (string) Env::get('API_BEARER_TOKEN', ''),
