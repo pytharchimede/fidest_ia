@@ -27,16 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-require dirname(__DIR__, 3) . '/vendor/autoload.php';
-
-$configFile = dirname(__DIR__, 3) . '/config/app.php';
-if (!is_file($configFile)) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Configuration absente. Copiez config/app.example.php vers config/app.php.']);
-    exit;
-}
-
-$config = require $configFile;
+$root = dirname(__DIR__, 3);
+$config = require $root . '/bootstrap.php';
 
 try {
     if (!isset($_FILES['document'])) {
@@ -48,10 +40,16 @@ try {
         throw new RuntimeException('Le champ document_type est requis.');
     }
 
+    $maxUploadMb = (int) ($config['storage']['max_upload_mb'] ?? 15);
+    $maxUploadBytes = $maxUploadMb * 1024 * 1024;
+    if ((int) ($_FILES['document']['size'] ?? 0) > $maxUploadBytes) {
+        throw new RuntimeException("Le document dépasse la taille maximale autorisée de {$maxUploadMb} Mo.");
+    }
+
     $db = Database::connection($config);
     $documents = new DocumentRepository($db);
     $rules = new ValidationRuleRepository($db);
-    $storagePath = $config['storage']['documents_path'] ?? dirname(__DIR__, 3) . '/storage/documents';
+    $storagePath = $config['storage']['documents_path'] ?? $root . '/storage/documents';
 
     $service = new DocumentAnalysisService(
         new DocumentStorageService($storagePath),
