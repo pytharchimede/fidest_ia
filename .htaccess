@@ -8,6 +8,9 @@ DirectoryIndex index.php
     RewriteRule ^(?:app|config|database|storage|tests|vendor|scripts|src|data|feb|docs)(?:/|$) - [F,L,NC]
     RewriteRule ^(?:\.env(?:\..*)?|composer\.(?:json|lock)|README(?:_PROTOTYPE)?\.md)$ - [F,L,NC]
 
+    # Administration interface.
+    RewriteRule ^admin/?$ public/admin/index.php [L,QSA]
+
     # Professional versioned API routes.
     RewriteRule ^api/v1/(.*)$ public/api/v1/index.php?_route=$1 [L,QSA]
 
