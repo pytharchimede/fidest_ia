@@ -25,23 +25,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
 }
 
 try {
-    ApiAuth::requireBearer($config);
-
     $route = '/' . trim((string) ($_GET['_route'] ?? ''), '/');
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     $db = Database::connection($config);
     $documents = new DocumentRepository($db);
 
     if ($method === 'GET' && $route === '/health') {
+        $client = ApiAuth::authenticate($config, $db, null);
         respond(200, [
             'success' => true,
             'service' => 'FIDEST IA',
             'api_version' => 'v1',
             'status' => 'ok',
+            'client' => ['name' => $client['name'] ?? null, 'scopes' => $client['scopes'] ?? []],
         ]);
     }
 
     if ($route === '/document-types' && $method === 'GET') {
+        ApiAuth::authenticate($config, $db, 'types:read');
         $types = array_map(static function (array $type): array {
             $schema = json_decode((string) ($type['extraction_schema'] ?? '{}'), true) ?: [];
             return [
@@ -58,6 +59,7 @@ try {
     }
 
     if ($route === '/document-types' && $method === 'POST') {
+        ApiAuth::authenticate($config, $db, 'types:write');
         $payload = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
         $name = trim((string) ($payload['name'] ?? ''));
         if ($name === '') {
@@ -87,6 +89,8 @@ try {
     }
 
     if ($route === '/documents/analyze' && $method === 'POST') {
+        ApiAuth::authenticate($config, $db, 'documents:analyze');
+
         if (!isset($_FILES['document'])) {
             throw new RuntimeException('Le champ document est requis.');
         }
