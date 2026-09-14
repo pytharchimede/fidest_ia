@@ -25,6 +25,11 @@ $config = [
         'auto_migrate' => Env::bool('AUTO_MIGRATE', true),
         'auto_bootstrap' => Env::bool('AUTO_BOOTSTRAP', true),
     ],
+    'api' => [
+        'enabled' => Env::bool('API_ENABLED', true),
+        'bearer_token' => (string) Env::get('API_BEARER_TOKEN', ''),
+        'allowed_origins' => (string) Env::get('API_ALLOWED_ORIGINS', ''),
+    ],
     'database' => [
         'host' => (string) Env::get('DB_HOST', 'localhost'),
         'port' => (int) Env::get('DB_PORT', 3306),
