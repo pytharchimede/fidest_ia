@@ -1,0 +1,97 @@
+<?php
+
+namespace FidestIA\Services;
+
+use FidestIA\Contracts\OcrEngineInterface;
+use FidestIA\Repositories\DocumentRepository;
+use FidestIA\Repositories\ValidationRuleRepository;
+use RuntimeException;
+
+final class DocumentAnalysisService
+{
+    public function __construct(
+        private readonly DocumentStorageService $storage,
+        private readonly OcrEngineInterface $ocr,
+        private readonly DocumentExtractionService $extractor,
+        private readonly ValidationEngine $validator,
+        private readonly DocumentRepository $documents,
+        private readonly ValidationRuleRepository $rules
+    ) {}
+
+    public function analyze(array $file, string $documentTypeCode, ?string $clientReference = null): array
+    {
+        $type = $this->documents->findTypeByCode($documentTypeCode);
+        if (!$type) {
+            throw new RuntimeException('Type de document inconnu ou inactif.');
+        }
+
+        $stored = $this->storage->store($file);
+        $uuid = $this->uuidV4();
+
+        $documentId = $this->documents->create([
+            'uuid' => $uuid,
+            'document_type_id' => (int) $type['id'],
+            'client_reference' => $clientReference,
+            'original_name' => $stored['original_name'],
+            'stored_name' => $stored['stored_name'],
+            'storage_path' => $stored['relative_path'],
+            'mime_type' => $stored['mime_type'],
+            'file_size' => $stored['file_size'],
+            'sha256' => $stored['sha256'],
+            'status' => 'processing',
+        ]);
+
+        try {
+            $ocr = $this->ocr->extract($stored['absolute_path'], $stored['mime_type']);
+            $data = $this->extractor->extract($ocr['text'], $type['code']);
+            $rules = $this->rules->forDocumentType((int) $type['id']);
+            $validation = $this->validator->validate((int) $type['id'], $data, $rules);
+            $status = $validation['valid'] ? 'validated' : 'rejected';
+
+            foreach ($validation['results'] as $result) {
+                $this->rules->saveResult(
+                    $documentId,
+                    $result['rule_id'],
+                    $result['passed'],
+                    $result['severity'],
+                    $result['message'],
+                    $result['context']
+                );
+            }
+
+            $this->documents->updateAnalysis($documentId, $ocr['text'], $data, $status, $ocr['confidence']);
+
+            return [
+                'success' => true,
+                'document_id' => $documentId,
+                'uuid' => $uuid,
+                'status' => $status,
+                'document_type' => ['code' => $type['code'], 'name' => $type['name']],
+                'file' => [
+                    'original_name' => $stored['original_name'],
+                    'mime_type' => $stored['mime_type'],
+                    'size' => $stored['file_size'],
+                    'sha256' => $stored['sha256'],
+                ],
+                'ocr' => [
+                    'engine' => $ocr['meta']['engine'] ?? 'unknown',
+                    'confidence' => $ocr['confidence'],
+                    'text' => $ocr['text'],
+                ],
+                'data' => $data,
+                'validation' => $validation,
+            ];
+        } catch (\Throwable $e) {
+            $this->documents->updateAnalysis($documentId, '', [], 'error', null);
+            throw $e;
+        }
+    }
+
+    private function uuidV4(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+}
