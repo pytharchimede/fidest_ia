@@ -1,60 +1,129 @@
-# FIDEST IA — API v1 de contrôle documentaire
+# FIDEST IA — API de contrôle documentaire
 
-FIDEST IA expose une API HTTP versionnée permettant à FINEA, IFMAP, LBP ou toute autre application autorisée d'envoyer des documents pour OCR, typage, extraction et validation.
+FIDEST IA expose une API HTTP versionnée permettant à FINEA, IFMAP, LBP ou toute autre application d'envoyer un document pour OCR, typage, extraction et validation.
 
-## Base URL
+## URL de base
 
 ```text
-https://votre-domaine.tld/api/v1
+https://votre-domaine/api/v1
 ```
 
-Si FIDEST IA est installé dans un sous-dossier :
+Exemples de routes :
 
 ```text
-https://votre-domaine.tld/fidest_ia/api/v1
+POST /api/v1/documents/analyze
+GET  /api/v1/document-types
+POST /api/v1/document-types
+GET  /api/v1/health
 ```
 
 Aucune route publique v1 ne contient `.php`.
 
+## Enregistrer une application cliente
+
+Les clés API ne doivent pas être créées manuellement dans le code des applications clientes.
+
+Depuis FIDEST IA :
+
+```text
+/admin
+```
+
+1. se connecter à l'administration ;
+2. créer une application, par exemple `FINEA Production` ;
+3. sélectionner les scopes nécessaires ;
+4. définir éventuellement une date d'expiration ;
+5. cliquer sur `Créer et générer la clé` ;
+6. copier immédiatement la clé affichée.
+
+Exemple de clé :
+
+```text
+fia_live_ab12cd34_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+La clé complète n'est affichée qu'une seule fois. FIDEST IA ne conserve en base qu'une empreinte SHA-256 de la clé.
+
+Chaque application possède donc sa propre clé. Une clé peut être révoquée sans affecter les autres applications.
+
+## Scopes disponibles
+
+```text
+documents:analyze   analyser et contrôler des documents
+types:read          lire le catalogue des types documentaires
+types:write         créer des types documentaires
+```
+
+Recommandation pour FINEA :
+
+```text
+documents:analyze
+types:read
+```
+
+N'accordez `types:write` qu'à une application autorisée à administrer le catalogue documentaire.
+
 ## Authentification
 
-Toutes les routes v1 exigent :
+Toutes les requêtes API v1 utilisent :
 
 ```http
-Authorization: Bearer VOTRE_JETON_API
+Authorization: Bearer VOTRE_CLE_API
 Accept: application/json
 ```
 
-Le jeton est défini côté serveur avec `API_BEARER_TOKEN`. Il ne doit jamais être placé dans du JavaScript livré au navigateur. Pour FINEA, privilégier un appel PHP serveur-à-serveur.
+Exemple :
 
-## Routes
+```bash
+curl 'https://votre-domaine/api/v1/health' \
+  -H 'Authorization: Bearer fia_live_...'
+```
 
-| Méthode | Route | Fonction |
-|---|---|---|
-| `POST` | `/documents/analyze` | OCR, classification, extraction et contrôle d'un document |
-| `GET` | `/document-types` | Liste des types documentaires disponibles |
-| `POST` | `/document-types` | Création d'un type documentaire |
-| `GET` | `/health` | Vérification de disponibilité de l'API |
+## 1. Analyser et contrôler un document
 
-## Analyser un document
+### Endpoint
 
 ```http
 POST /api/v1/documents/analyze
-Authorization: Bearer ...
+Authorization: Bearer <clé avec documents:analyze>
 Content-Type: multipart/form-data
 ```
 
-Champs :
+### Champs multipart
 
-- `document` : obligatoire ; fichier à analyser.
-- `document_type` : facultatif ; `AUTO` par défaut, `GENERAL` ou code explicite.
-- `client_reference` : facultatif ; identifiant du dossier dans l'application appelante.
+| Champ | Obligatoire | Description |
+|---|---:|---|
+| `document` | oui | Fichier à analyser. |
+| `document_type` | non | `AUTO` par défaut, `GENERAL`, ou code d'un type existant. |
+| `client_reference` | non | Référence libre de l'application appelante. |
 
-### PHP / FINEA
+### Exemple cURL
+
+```bash
+curl -X POST 'https://votre-domaine/api/v1/documents/analyze' \
+  -H 'Authorization: Bearer fia_live_...' \
+  -H 'Accept: application/json' \
+  -F 'document=@/chemin/facture.pdf' \
+  -F 'document_type=AUTO' \
+  -F 'client_reference=FEB-2026-00125'
+```
+
+### Exemple PHP pour FINEA
+
+Stocker dans le `.env` de FINEA :
+
+```dotenv
+FIDEST_IA_URL=https://votre-domaine
+FIDEST_IA_API_TOKEN=fia_live_...
+```
+
+Puis :
 
 ```php
-$endpoint = 'https://ia.example.com/api/v1/documents/analyze';
-$token = getenv('FIDEST_IA_API_TOKEN');
+<?php
+
+$endpoint = rtrim((string) getenv('FIDEST_IA_URL'), '/') . '/api/v1/documents/analyze';
+$token = (string) getenv('FIDEST_IA_API_TOKEN');
 
 $ch = curl_init($endpoint);
 curl_setopt_array($ch, [
@@ -65,36 +134,28 @@ curl_setopt_array($ch, [
         'Accept: application/json',
     ],
     CURLOPT_POSTFIELDS => [
-        'document' => new CURLFile($filePath),
+        'document' => new CURLFile('/chemin/facture.pdf'),
         'document_type' => 'AUTO',
-        'client_reference' => 'FEB-' . $febId,
+        'client_reference' => 'FEB-2026-00125',
     ],
     CURLOPT_CONNECTTIMEOUT => 10,
     CURLOPT_TIMEOUT => 120,
 ]);
 
-$raw = curl_exec($ch);
+$response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$error = curl_error($ch);
 curl_close($ch);
 
-if ($raw === false || $error !== '') {
-    throw new RuntimeException('FIDEST IA indisponible: ' . $error);
+$result = json_decode((string) $response, true);
+
+if ($httpCode === 200 && ($result['success'] ?? false)) {
+    $type = $result['document_type']['code'] ?? null;
+    $valid = $result['validation']['valid'] ?? false;
+    $data = $result['data'] ?? [];
 }
-
-$result = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
-
-if ($httpCode !== 200 || !($result['success'] ?? false)) {
-    throw new RuntimeException($result['error'] ?? 'Contrôle documentaire impossible.');
-}
-
-$isValid = (bool) ($result['validation']['valid'] ?? false);
-$type = $result['document_type']['code'] ?? null;
-$data = $result['data'] ?? [];
-$uuid = $result['uuid'] ?? null;
 ```
 
-## Exemple de réponse
+## Réponse d'analyse
 
 ```json
 {
@@ -112,17 +173,6 @@ $uuid = $result['uuid'] ?? null;
     "code": "COMMERCIAL_INVOICE_CI",
     "name": "Facture commerciale / fournisseur"
   },
-  "file": {
-    "original_name": "facture.pdf",
-    "mime_type": "application/pdf",
-    "size": 146488,
-    "sha256": "..."
-  },
-  "ocr": {
-    "engine": "tesseract+poppler",
-    "confidence": null,
-    "text": "..."
-  },
   "data": {},
   "validation": {
     "valid": true,
@@ -131,22 +181,28 @@ $uuid = $result['uuid'] ?? null;
 }
 ```
 
-`success=true` signifie que la requête a été traitée techniquement. `validation.valid=true` signifie que les règles métier du type documentaire ont été satisfaites. Les deux notions ne doivent pas être confondues.
+Ne pas confondre :
 
-## Types documentaires
+- `success=true` : traitement technique réussi ;
+- `validation.valid=true` : règles métier satisfaites.
 
-### Lister
+## 2. Lister les types documentaires
 
 ```http
 GET /api/v1/document-types
-Authorization: Bearer ...
+Authorization: Bearer <clé avec types:read>
 ```
 
-### Créer
+```bash
+curl 'https://votre-domaine/api/v1/document-types' \
+  -H 'Authorization: Bearer fia_live_...'
+```
+
+## 3. Créer un type documentaire
 
 ```http
 POST /api/v1/document-types
-Authorization: Bearer ...
+Authorization: Bearer <clé avec types:write>
 Content-Type: application/json
 ```
 
@@ -160,42 +216,45 @@ Content-Type: application/json
 }
 ```
 
-## Health check
+## 4. Santé de l'API
 
 ```http
 GET /api/v1/health
-Authorization: Bearer ...
+Authorization: Bearer <clé valide>
 ```
+
+La réponse indique également l'application reconnue et ses scopes.
+
+## Gestion des clés dans FIDEST IA
+
+Depuis `/admin`, l'administrateur peut :
+
+- créer une application cliente ;
+- générer automatiquement sa clé ;
+- sélectionner les scopes ;
+- définir une expiration ;
+- voir le préfixe de la clé ;
+- voir la dernière utilisation ;
+- révoquer la clé.
+
+La clé complète n'est jamais réaffichée après sa création.
 
 ## Codes HTTP
 
-- `200` : requête réussie.
-- `201` : ressource créée.
-- `204` : requête `OPTIONS` CORS.
-- `401` : jeton absent ou invalide.
-- `404` : route inconnue.
-- `422` : document, données ou traitement invalides.
+- `200` : succès ;
+- `201` : ressource créée ;
+- `204` : réponse OPTIONS ;
+- `401` : clé absente, invalide, expirée ou révoquée ;
+- `403` : clé valide mais scope insuffisant ;
+- `404` : route inconnue ;
+- `405` : méthode non autorisée ;
+- `422` : requête/document invalide ou erreur d'analyse.
 
-## Configuration serveur
+## Bonnes pratiques
 
-```dotenv
-API_ENABLED=true
-API_BEARER_TOKEN=jeton-secret-long-et-aleatoire
-API_ALLOWED_ORIGINS=
-```
-
-Pour une intégration PHP serveur-à-serveur comme FINEA, `API_ALLOWED_ORIGINS` peut rester vide : CORS concerne les navigateurs, pas les appels backend cURL.
-
-Ne versionnez jamais le jeton API dans Git. Dans l'application consommatrice, stockez également son jeton dans son propre `.env` ou gestionnaire de secrets.
-
-## Recommandation d'intégration
-
-Conserver dans l'application appelante au minimum :
-
-- `uuid` FIDEST IA ;
-- `document_type.code` ;
-- `validation.valid` ;
-- `data` ;
-- `file.sha256` si la traçabilité du fichier est nécessaire.
-
-Pour audit, conserver aussi la réponse JSON complète.
+- une clé différente par application et par environnement ;
+- ne jamais stocker une clé API dans Git ;
+- privilégier les appels serveur-à-serveur ;
+- révoquer immédiatement une clé compromise ;
+- n'accorder que les scopes nécessaires ;
+- créer des clés distinctes pour développement, staging et production.
