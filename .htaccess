@@ -1,0 +1,13 @@
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Never expose application internals or secret/config files.
+    RewriteRule ^(?:app|config|database|storage|tests|vendor|scripts|src|data|feb)(?:/|$) - [F,L,NC]
+    RewriteRule ^(?:\.env(?:\..*)?|composer\.(?:json|lock)|README(?:_PROTOTYPE)?\.md)$ - [F,L,NC]
+
+    # Keep the public API reachable while the project lives in /fidest_ia.
+    RewriteRule ^api/(.*)$ public/api/$1 [L,QSA]
+</IfModule>
