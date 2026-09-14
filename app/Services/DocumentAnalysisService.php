@@ -57,7 +57,8 @@ final class DocumentAnalysisService
                 }
             }
 
-            $data = $this->extractor->extract($ocr['text'], $type['code']);
+            $schema = json_decode((string) ($type['extraction_schema'] ?? '{}'), true) ?: [];
+            $data = $this->extractor->extract($ocr['text'], $type['code'], $schema);
             if ($type['code'] === 'GENERAL') {
                 $data = [
                     'title' => $this->firstUsefulLine($ocr['text']),
