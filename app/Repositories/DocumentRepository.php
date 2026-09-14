@@ -15,6 +15,34 @@ final class DocumentRepository
         return $stmt->fetch() ?: null;
     }
 
+    public function allTypes(bool $activeOnly = true): array
+    {
+        $sql = 'SELECT * FROM document_types';
+        if ($activeOnly) {
+            $sql .= ' WHERE active = 1';
+        }
+        $sql .= ' ORDER BY CASE WHEN code = \'GENERAL\' THEN 0 ELSE 1 END, name ASC';
+        return $this->db->query($sql)->fetchAll();
+    }
+
+    public function createType(array $data): int
+    {
+        $stmt = $this->db->prepare('INSERT INTO document_types (code, name, description, extraction_schema, active) VALUES (?, ?, ?, ?, 1)');
+        $stmt->execute([
+            strtoupper(trim((string) $data['code'])),
+            trim((string) $data['name']),
+            trim((string) ($data['description'] ?? '')) ?: null,
+            json_encode($data['extraction_schema'] ?? ['fields' => [], 'keywords' => []], JSON_UNESCAPED_UNICODE),
+        ]);
+        return (int) $this->db->lastInsertId();
+    }
+
+    public function updateDocumentType(int $documentId, int $documentTypeId): void
+    {
+        $stmt = $this->db->prepare('UPDATE documents SET document_type_id = ? WHERE id = ?');
+        $stmt->execute([$documentTypeId, $documentId]);
+    }
+
     public function create(array $data): int
     {
         $sql = 'INSERT INTO documents
