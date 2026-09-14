@@ -35,7 +35,6 @@ final class MigrationRunner
                 throw new RuntimeException('Impossible de lire la migration : ' . $name);
             }
 
-            $this->db->beginTransaction();
             try {
                 foreach ($this->splitStatements($sql) as $statement) {
                     if (trim($statement) !== '') {
@@ -45,12 +44,8 @@ final class MigrationRunner
 
                 $stmt = $this->db->prepare('INSERT INTO schema_migrations (migration, checksum) VALUES (?, ?)');
                 $stmt->execute([$name, hash('sha256', $sql)]);
-                $this->db->commit();
                 $applied[] = $name;
             } catch (Throwable $e) {
-                if ($this->db->inTransaction()) {
-                    $this->db->rollBack();
-                }
                 throw new RuntimeException('Échec de migration ' . $name . ' : ' . $e->getMessage(), 0, $e);
             }
         }
