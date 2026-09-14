@@ -92,6 +92,8 @@ final class DocumentAnalysisService
                 'classification' => [
                     'automatic' => $auto,
                     'score' => $type['classification_score'] ?? null,
+                    'signals' => $type['classification_signals'] ?? [],
+                    'fallback_to_general' => $auto && ($type['code'] ?? '') === 'GENERAL',
                 ],
                 'document_type' => ['code' => $type['code'], 'name' => $type['name']],
                 'file' => [
