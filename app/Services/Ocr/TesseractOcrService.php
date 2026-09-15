@@ -1,143 +1,23 @@
 <?php
-
+declare(strict_types=1);
 namespace FidestIA\Services\Ocr;
-
-use FidestIA\Contracts\OcrEngineInterface;
+use FidestIA\Contracts\{OcrEngineInterface,PdfToImageConverterInterface};
+use FidestIA\Core\ProcessRunner;
 use RuntimeException;
-use thiagoalessio\TesseractOCR\TesseractOCR;
-
 final class TesseractOcrService implements OcrEngineInterface
 {
-    public function __construct(
-        private readonly string $binary = 'tesseract',
-        private readonly string $languages = 'fra+eng',
-        private readonly string $pdfBinary = 'pdftoppm',
-        private readonly int $maxPdfPages = 30
-    ) {}
-
-    public function extract(string $absolutePath, string $mimeType): array
+    public function __construct(private readonly string $binary='tesseract',private readonly string $languages='fra+eng',private readonly ?PdfToImageConverterInterface $pdfConverter=null,private readonly ?ImagePreprocessor $preprocessor=null,private readonly ?ProcessRunner $runner=null){}
+    public function extract(string $absolutePath,string $mimeType):array
     {
-        if (!is_file($absolutePath)) {
-            throw new RuntimeException('Document introuvable pour OCR.');
-        }
-
-        if ($mimeType === 'application/pdf') {
-            return $this->extractPdf($absolutePath);
-        }
-
-        return [
-            'text' => $this->ocrImage($absolutePath),
-            'confidence' => null,
-            'meta' => [
-                'engine' => 'tesseract',
-                'languages' => $this->languages,
-                'source' => 'image',
-                'pages' => 1,
-            ],
-        ];
+        if(!is_file($absolutePath))throw new RuntimeException('Document introuvable pour OCR.');if(!$this->available())throw new RuntimeException('Aucun moteur OCR exécutable : configurez OCR_BINARY vers Tesseract ou son AppImage utilisateur.');
+        $pages=[$absolutePath];$temporaryDirectory=null;$converter=null;if($mimeType==='application/pdf'){if(!$this->pdfConverter)throw new RuntimeException('Aucun convertisseur PDF configuré.');$converted=$this->pdfConverter->convert($absolutePath);$pages=$converted['pages'];$temporaryDirectory=$converted['temporary_directory'];$converter=$converted['converter'];}
+        $texts=[];$prepared=[];
+        try{foreach($pages as $index=>$page){$input=$this->preprocessor?->prepare($page)??$page;if($input!==$page)$prepared[]=$input;$text=$this->ocrImage($input);$texts[]=['number'=>$index+1,'text'=>$text];}$full=count($texts)===1?$texts[0]['text']:implode("\n\n",array_map(fn($p)=>'--- PAGE '.$p['number']." ---\n".$p['text'],$texts));return ['text'=>trim($full),'confidence'=>$this->estimateConfidence($texts),'meta'=>['engine'=>'tesseract','languages'=>$this->languages,'source'=>$mimeType==='application/pdf'?'pdf':'image','pages'=>count($pages),'page_results'=>$texts,'pdf_converter'=>$converter,'confidence_method'=>'deterministic_text_quality_heuristic']];}
+        finally{foreach($prepared as $file)@unlink($file);if($temporaryDirectory){foreach(glob($temporaryDirectory.'/*')?:[] as $file)if(is_file($file))@unlink($file);@rmdir($temporaryDirectory);}}
     }
-
-    private function extractPdf(string $pdfPath): array
-    {
-        if (!$this->canExecuteCommands()) {
-            throw new RuntimeException(
-                'OCR PDF indisponible : PHP interdit l’exécution de commandes système. '
-                . 'Activez exec() ou utilisez un adaptateur OCR distant.'
-            );
-        }
-
-        if (!$this->binaryExists($this->pdfBinary)) {
-            throw new RuntimeException(
-                "OCR PDF indisponible : le binaire {$this->pdfBinary} (Poppler) est absent du serveur. "
-                . 'Sous Ubuntu : sudo apt install poppler-utils.'
-            );
-        }
-
-        $tmpDir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
-            . DIRECTORY_SEPARATOR . 'fidest_ia_pdf_' . bin2hex(random_bytes(8));
-
-        if (!mkdir($tmpDir, 0700, true) && !is_dir($tmpDir)) {
-            throw new RuntimeException('Impossible de créer le dossier temporaire pour le PDF.');
-        }
-
-        $prefix = $tmpDir . DIRECTORY_SEPARATOR . 'page';
-        $command = escapeshellcmd($this->pdfBinary)
-            . ' -f 1 -l ' . max(1, $this->maxPdfPages)
-            . ' -r 200 -png '
-            . escapeshellarg($pdfPath) . ' '
-            . escapeshellarg($prefix)
-            . ' 2>&1';
-
-        $output = [];
-        $exitCode = 0;
-
-        try {
-            exec($command, $output, $exitCode);
-
-            if ($exitCode !== 0) {
-                throw new RuntimeException(
-                    'Échec de conversion du PDF avec Poppler : ' . trim(implode("\n", $output))
-                );
-            }
-
-            $pages = glob($prefix . '-*.png') ?: [];
-            natsort($pages);
-            $pages = array_values($pages);
-
-            if ($pages === []) {
-                throw new RuntimeException('Aucune page exploitable n’a été produite depuis le PDF.');
-            }
-
-            $texts = [];
-            foreach ($pages as $index => $page) {
-                $pageText = trim($this->ocrImage($page));
-                $texts[] = "--- PAGE " . ($index + 1) . " ---\n" . $pageText;
-            }
-
-            return [
-                'text' => trim(implode("\n\n", $texts)),
-                'confidence' => null,
-                'meta' => [
-                    'engine' => 'tesseract+poppler',
-                    'languages' => $this->languages,
-                    'source' => 'pdf',
-                    'pages' => count($pages),
-                    'max_pages' => $this->maxPdfPages,
-                ],
-            ];
-        } finally {
-            foreach (glob($tmpDir . DIRECTORY_SEPARATOR . '*') ?: [] as $file) {
-                @unlink($file);
-            }
-            @rmdir($tmpDir);
-        }
-    }
-
-    private function ocrImage(string $path): string
-    {
-        $ocr = new TesseractOCR($path);
-        $ocr->executable($this->binary);
-        $ocr->lang(...array_filter(explode('+', $this->languages)));
-        $ocr->psm(6);
-
-        return trim((string) $ocr->run());
-    }
-
-    private function canExecuteCommands(): bool
-    {
-        if (!function_exists('exec')) {
-            return false;
-        }
-
-        $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
-        return !in_array('exec', $disabled, true);
-    }
-
-    private function binaryExists(string $binary): bool
-    {
-        $output = [];
-        $code = 1;
-        exec('command -v ' . escapeshellarg($binary) . ' 2>/dev/null', $output, $code);
-        return $code === 0 && !empty($output);
-    }
+    public function available():bool{if(str_contains($this->binary,'/'))return is_file($this->binary)&&is_executable($this->binary);try{$r=$this->process()->run(['sh','-c','command -v "$1"','fidest',$this->binary]);return $r['exit_code']===0&&trim($r['stdout'])!=='';}catch(\Throwable){return false;}}
+    public function engineName():string{return 'tesseract';}
+    private function ocrImage(string $path):string{$env=null;$result=$this->process()->run([$this->binary,$path,'stdout','-l',$this->languages,'--psm','6'],$env);if($result['exit_code']!==0)throw new RuntimeException('Échec OCR Tesseract : '.$result['stderr']);return trim($result['stdout']);}
+    private function process():ProcessRunner{return $this->runner??new ProcessRunner(120);}
+    private function estimateConfidence(array $pages):?float{$text=implode('',array_column($pages,'text'));if(trim($text)==='')return 0.0;$length=mb_strlen($text);$valid=mb_strlen(preg_replace('/[^\pL\pN\pP\pZ\r\n]/u','',$text)??'');$quality=$valid/max(1,$length);$lengthFactor=min(1,$length/250);return round(min(.92,max(.25,($quality*.65)+($lengthFactor*.27))),2);}
 }

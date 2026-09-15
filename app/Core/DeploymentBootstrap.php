@@ -28,10 +28,14 @@ final class DeploymentBootstrap
         $checks['php']['version'] = PHP_VERSION;
         $checks['php']['pdo_mysql'] = extension_loaded('pdo_mysql');
         $checks['php']['fileinfo'] = extension_loaded('fileinfo');
+        $checks['php']['gd'] = extension_loaded('gd');
         $checks['php']['exec_available'] = $this->commandExecutionAvailable();
 
         $checks['system']['tesseract'] = $this->findBinary((string) ($config['ocr']['binary'] ?? 'tesseract'));
         $checks['system']['pdftoppm'] = $this->findBinary('pdftoppm');
+        $checks['system']['ghostscript'] = $this->findBinary((string)($config['pdf']['gs_binary']??'/bin/gs'));
+        $checks['system']['imagemagick'] = $this->findBinary((string)($config['pdf']['imagemagick_binary']??'/bin/convert'));
+        $checks['system']['embedded_ocr'] = $this->findBinary((string)($config['ocr']['embedded_binary']??''));
 
         return $checks;
     }

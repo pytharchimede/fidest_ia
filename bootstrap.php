@@ -33,6 +33,7 @@ $config = [
         'bearer_token' => (string) Env::get('API_BEARER_TOKEN', ''),
         'allowed_origins' => (string) Env::get('API_ALLOWED_ORIGINS', ''),
     ],
+    'ai' => ['enabled' => Env::bool('AI_ENABLED', false)],
     'database' => [
         'host' => (string) Env::get('DB_HOST', 'localhost'),
         'port' => (int) Env::get('DB_PORT', 3306),
@@ -42,9 +43,19 @@ $config = [
         'charset' => (string) Env::get('DB_CHARSET', 'utf8mb4'),
     ],
     'ocr' => [
-        'driver' => (string) Env::get('OCR_DRIVER', 'tesseract'),
+        'driver' => (string) Env::get('OCR_DRIVER', 'auto'),
         'binary' => (string) Env::get('OCR_BINARY', 'tesseract'),
+        'embedded_binary' => (string) Env::get('OCR_EMBEDDED_BINARY', __DIR__ . '/tools/tesseract/tesseract.AppImage'),
         'languages' => (string) Env::get('OCR_LANGUAGES', 'fra+eng'),
+        'timeout' => (int) Env::get('OCR_TIMEOUT_SECONDS', 120),
+    ],
+    'pdf' => [
+        'converter' => (string) Env::get('PDF_CONVERTER', 'auto'),
+        'poppler_binary' => (string) Env::get('PDF_POPPLER_BINARY', 'pdftoppm'),
+        'gs_binary' => (string) Env::get('PDF_GS_BINARY', '/bin/gs'),
+        'imagemagick_binary' => (string) Env::get('PDF_IMAGEMAGICK_BINARY', '/bin/convert'),
+        'dpi' => (int) Env::get('PDF_DPI', 250),
+        'max_pages' => (int) Env::get('PDF_MAX_PAGES', 20),
     ],
     'storage' => [
         'documents_path' => $documentsPath,
