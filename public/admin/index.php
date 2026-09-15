@@ -1,119 +1,47 @@
 <?php
-
 declare(strict_types=1);
-
-use FidestIA\Core\AdminAuth;
-use FidestIA\Core\Database;
-use FidestIA\Repositories\ApiClientRepository;
-
-$root = dirname(__DIR__, 2);
-$config = require $root . '/bootstrap.php';
-AdminAuth::start($config);
-
-$error = null;
-$createdKey = null;
-
-if (isset($_GET['logout'])) {
-    AdminAuth::logout($config);
-    header('Location: ./');
-    exit;
+use FidestIA\Core\{AdminAuth,Csrf,Database};
+use FidestIA\Repositories\{ApiClientRepository,ApiLogRepository,DocumentRepository,ValidationRuleRepository};
+$root=dirname(__DIR__,2);$config=require $root.'/bootstrap.php';AdminAuth::start($config);$base=rtrim((string)$config['app']['url'],'/').'/admin';
+if(isset($_GET['logout'])){AdminAuth::logout($config);header('Location: '.$base);exit;}
+$error=null;if(!AdminAuth::check($config)){if($_SERVER['REQUEST_METHOD']==='POST'&&AdminAuth::login($config,(string)($_POST['admin_token']??''))){header('Location: '.$base);exit;}$error=$_SERVER['REQUEST_METHOD']==='POST'?'Accès refusé.':null;loginPage($error);}
+$db=Database::connection($config);$apps=new ApiClientRepository($db);$docs=new DocumentRepository($db);$rules=new ValidationRuleRepository($db);$logs=new ApiLogRepository($db);$route=trim((string)($_GET['_route']??''),'/');$route=$route===''?'dashboard':$route;$notice=null;$createdKey=null;
+if($_SERVER['REQUEST_METHOD']==='POST'){
+ if(!Csrf::validate($_POST['_csrf']??null)){http_response_code(419);exit('Jeton CSRF invalide.');}$action=(string)($_POST['action']??'');
+ if($action==='create_app'){$name=trim((string)($_POST['name']??''));$scopes=array_values(array_intersect((array)($_POST['scopes']??[]),ApiClientRepository::SCOPES));if($name===''||$scopes===[])$error='Nom et scope requis.';else $createdKey=$apps->create($name,$scopes,trim((string)($_POST['expires_at']??''))?:null,['environment'=>$_POST['environment']??'production','description'=>trim((string)($_POST['description']??''))?:null,'origin'=>trim((string)($_POST['origin']??''))?:null,'notes'=>trim((string)($_POST['notes']??''))?:null,'rate_limit_per_minute'=>(int)($_POST['rate_limit']??60)]);}
+ if($action==='revoke_app'){$apps->revoke((int)$_POST['id']);$notice='Application révoquée.';}if($action==='regenerate_app'){$createdKey=$apps->regenerate((int)$_POST['id']);}
+ if($action==='create_type'){$name=trim((string)($_POST['name']??''));$code=trim(strtoupper((string)preg_replace('/[^A-Z0-9]+/i','_',$_POST['code']??$name)),'_');$schema=json_decode((string)($_POST['schema']??'{}'),true);if($name===''||$code===''||!is_array($schema))$error='Nom, code et JSON valides requis.';else{$docs->createType(['code'=>$code,'name'=>$name,'description'=>$_POST['description']??null,'extraction_schema'=>$schema]);$notice='Type créé.';}}
+ if($action==='create_rule'){$rules->create(['document_type_id'=>(int)$_POST['document_type_id'],'name'=>trim((string)$_POST['name']),'rule_type'=>$_POST['rule_type'],'field_name'=>trim((string)($_POST['field_name']??'')),'error_message'=>trim((string)$_POST['error_message']),'severity'=>$_POST['severity']??'error']);$notice='Règle créée.';}
 }
-
-if (!AdminAuth::check($config)) {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_token'])) {
-        if (AdminAuth::login($config, (string) $_POST['admin_token'])) {
-            header('Location: ./');
-            exit;
-        }
-        $error = 'Accès administrateur refusé.';
-    }
-
-    ?><!doctype html>
-    <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FIDEST IA — Administration</title>
-    <style>body{margin:0;font-family:Arial,sans-serif;background:#f8f9fa;color:#202124;display:grid;min-height:100vh;place-items:center}.card{width:min(420px,calc(100% - 32px));background:#fff;border:1px solid #dadce0;border-radius:18px;padding:28px;box-shadow:0 10px 30px rgba(60,64,67,.08)}h1{font-size:24px;margin:0 0 8px}p{color:#5f6368;line-height:1.5}input,button{width:100%;box-sizing:border-box;height:46px;border-radius:10px;font:inherit}input{border:1px solid #dadce0;padding:0 14px;margin:10px 0}button{border:0;background:#1a73e8;color:#fff;font-weight:600;cursor:pointer}.err{color:#b3261e;font-size:14px}</style></head>
-    <body><form class="card" method="post"><h1>Administration FIDEST IA</h1><p>Connectez-vous avec la clé maître d’administration configurée sur le serveur.</p><?php if ($error): ?><div class="err"><?=htmlspecialchars($error)?></div><?php endif; ?><input type="password" name="admin_token" required autocomplete="current-password" placeholder="Clé administrateur"><button type="submit">Se connecter</button></form></body></html><?php
-    exit;
-}
-
-$db = Database::connection($config);
-$repo = new ApiClientRepository($db);
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = (string) ($_POST['action'] ?? '');
-
-    if ($action === 'create') {
-        $name = trim((string) ($_POST['name'] ?? ''));
-        $scopes = array_values(array_intersect(
-            (array) ($_POST['scopes'] ?? []),
-            ['documents:analyze', 'types:read', 'types:write']
-        ));
-        $expiresAt = trim((string) ($_POST['expires_at'] ?? '')) ?: null;
-
-        if ($name === '') {
-            $error = 'Le nom de l’application est requis.';
-        } elseif ($scopes === []) {
-            $error = 'Sélectionnez au moins un droit.';
-        } else {
-            $createdKey = $repo->create($name, $scopes, $expiresAt);
-        }
-    }
-
-    if ($action === 'revoke') {
-        $repo->revoke((int) ($_POST['id'] ?? 0));
-        header('Location: ./');
-        exit;
-    }
-}
-
-$clients = $repo->all();
-?><!doctype html>
-<html lang="fr">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FIDEST IA — Applications API</title>
-<style>
-*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#fff;color:#202124}.wrap{width:min(1100px,calc(100% - 32px));margin:0 auto;padding:26px 0 60px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:34px}.brand{font-size:18px;font-weight:700}.logout{color:#5f6368;text-decoration:none;font-size:14px}.hero{max-width:760px;margin-bottom:28px}.hero h1{font-size:34px;letter-spacing:-.03em;margin:0 0 10px}.hero p{color:#5f6368;line-height:1.6;margin:0}.grid{display:grid;grid-template-columns:360px 1fr;gap:24px;align-items:start}.card{border:1px solid #dadce0;border-radius:16px;padding:20px;background:#fff}.card h2{font-size:18px;margin:0 0 16px}.field{margin-bottom:14px}.field label{display:block;font-size:13px;font-weight:600;margin-bottom:7px}.field input{width:100%;height:42px;border:1px solid #dadce0;border-radius:9px;padding:0 11px;font:inherit}.checks{display:grid;gap:8px}.checks label{display:flex;gap:8px;align-items:center;font-size:14px}.primary{width:100%;height:44px;border:0;border-radius:9px;background:#1a73e8;color:#fff;font-weight:600;cursor:pointer;margin-top:8px}.notice{border:1px solid #a8c7fa;background:#f8fbff;border-radius:14px;padding:16px;margin-bottom:22px}.notice strong{display:block;margin-bottom:7px}.key{display:flex;gap:8px;align-items:center;margin-top:10px}.key code{flex:1;overflow:auto;background:#fff;border:1px solid #dadce0;border-radius:9px;padding:11px;font-size:12px}.copy{border:1px solid #dadce0;background:#fff;border-radius:9px;padding:10px 12px;cursor:pointer}.warning{font-size:13px;color:#b06000;margin-top:8px}.error{color:#b3261e;font-size:14px;margin-bottom:12px}.table-wrap{overflow:auto;border:1px solid #dadce0;border-radius:16px}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:13px 14px;border-bottom:1px solid #eee;font-size:13px;vertical-align:top}th{color:#5f6368;background:#f8f9fa;font-weight:600}.pill{display:inline-block;border-radius:999px;padding:4px 8px;background:#eef3fe;color:#174ea6;font-size:12px;margin:2px}.active{color:#137333;font-weight:600}.revoked{color:#b3261e;font-weight:600}.danger{border:1px solid #f1c7c3;background:#fff;color:#b3261e;border-radius:8px;padding:7px 10px;cursor:pointer}@media(max-width:850px){.grid{grid-template-columns:1fr}.hero h1{font-size:28px}}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="top"><div class="brand">FIDEST IA · Administration</div><a class="logout" href="?logout=1">Déconnexion</a></div>
-  <div class="hero"><h1>Applications API</h1><p>Enregistrez une application cliente, attribuez-lui les droits nécessaires puis copiez sa clé API. La valeur complète de la clé n’est affichée qu’une seule fois.</p></div>
-
-  <?php if ($createdKey): ?>
-  <div class="notice"><strong>Application créée : <?=htmlspecialchars($createdKey['name'])?></strong><div>Copiez cette clé maintenant :</div><div class="key"><code id="newKey"><?=htmlspecialchars($createdKey['key'])?></code><button class="copy" type="button" onclick="navigator.clipboard.writeText(document.getElementById('newKey').textContent)">Copier</button></div><div class="warning">Cette clé ne pourra plus être affichée après avoir quitté cette page.</div></div>
-  <?php endif; ?>
-
-  <div class="grid">
-    <form class="card" method="post">
-      <input type="hidden" name="action" value="create">
-      <h2>Créer une application</h2>
-      <?php if ($error): ?><div class="error"><?=htmlspecialchars($error)?></div><?php endif; ?>
-      <div class="field"><label>Nom de l’application</label><input name="name" required placeholder="Ex. FINEA Production"></div>
-      <div class="field"><label>Droits</label><div class="checks">
-        <label><input type="checkbox" name="scopes[]" value="documents:analyze" checked> documents:analyze</label>
-        <label><input type="checkbox" name="scopes[]" value="types:read" checked> types:read</label>
-        <label><input type="checkbox" name="scopes[]" value="types:write"> types:write</label>
-      </div></div>
-      <div class="field"><label>Expiration (optionnelle)</label><input type="datetime-local" name="expires_at"></div>
-      <button class="primary" type="submit">Créer et générer la clé</button>
-    </form>
-
-    <div>
-      <div class="table-wrap"><table><thead><tr><th>Application</th><th>Préfixe</th><th>Scopes</th><th>Dernière utilisation</th><th>Statut</th><th></th></tr></thead><tbody>
-      <?php if (!$clients): ?><tr><td colspan="6">Aucune application enregistrée.</td></tr><?php endif; ?>
-      <?php foreach ($clients as $client): $scopes=json_decode((string)$client['scopes'],true)?:[]; ?>
-        <tr>
-          <td><strong><?=htmlspecialchars((string)$client['name'])?></strong><br><span style="color:#5f6368"><?=htmlspecialchars((string)$client['created_at'])?></span></td>
-          <td><code><?=htmlspecialchars((string)$client['key_prefix'])?>…</code></td>
-          <td><?php foreach($scopes as $scope): ?><span class="pill"><?=htmlspecialchars((string)$scope)?></span><?php endforeach; ?></td>
-          <td><?=htmlspecialchars((string)($client['last_used_at'] ?: 'Jamais'))?></td>
-          <td class="<?=((int)$client['active']===1?'active':'revoked')?>"><?=((int)$client['active']===1?'Active':'Révoquée')?></td>
-          <td><?php if ((int)$client['active']===1): ?><form method="post" onsubmit="return confirm('Révoquer cette clé API ?')"><input type="hidden" name="action" value="revoke"><input type="hidden" name="id" value="<?= (int)$client['id'] ?>"><button class="danger" type="submit">Révoquer</button></form><?php endif; ?></td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody></table></div>
-    </div>
-  </div>
-</div>
-</body></html>
+$titles=['dashboard'=>'Dashboard','applications'=>'Applications API','documents'=>'Documents','document-types'=>'Types documentaires','validation-rules'=>'Règles','api-logs'=>'Logs / Audit','system'=>'État système','documentation'=>'Documentation','settings'=>'Paramètres'];$title=$titles[$route]??'Administration';
+headerPage($title,$base,$route);
+if($notice)echo '<div class="notice">'.h($notice).'</div>';if($error)echo '<div class="error">'.h($error).'</div>';
+if($route==='dashboard')dashboard($db,$docs,$logs,$apps);
+elseif($route==='applications')applications($apps,$createdKey);
+elseif($route==='documents'||preg_match('#^documents/([0-9a-f-]{36})$#i',$route,$m))documents($docs,$apps,$m[1]??null,$base);
+elseif($route==='document-types')types($docs);
+elseif($route==='validation-rules')rulesPage($rules,$docs);
+elseif($route==='api-logs')logsPage($logs,$apps);
+elseif($route==='system')systemPage($config,$db,$root);
+elseif($route==='documentation')documentation($config);
+else echo '<section class="card"><h2>'.h($title).'</h2><p class="muted">Configuration disponible via le fichier .env du serveur. Aucun secret n’est affiché ici.</p></section>';
+footerPage();
+function loginPage(?string $error):never{?><!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connexion · FIDEST IA</title><style>body{font-family:Arial;margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f8fb;color:#202124}.card{width:min(420px,calc(100% - 32px));box-sizing:border-box;background:white;padding:30px;border:1px solid #ddd;border-radius:18px}input,button{width:100%;height:46px;box-sizing:border-box;margin-top:12px;border-radius:10px;font:inherit}input{border:1px solid #ccc;padding:0 12px}button{border:0;background:#1a73e8;color:#fff;font-weight:bold}.e{color:#b3261e}</style><form method="post" class="card"><h1>FIDEST IA</h1><p>Administration sécurisée</p><?php if($error):?><p class="e"><?=h($error)?></p><?php endif?><input type="password" name="admin_token" required autocomplete="current-password" placeholder="Jeton administrateur"><button>Se connecter</button></form></html><?php exit;}
+function headerPage(string $title,string $base,string $route):void{$nav=['dashboard'=>'Dashboard','documents'=>'Documents','document-types'=>'Types documentaires','validation-rules'=>'Règles','applications'=>'Applications API','api-logs'=>'Logs / Audit','system'=>'État système','documentation'=>'Documentation','settings'=>'Paramètres'];?><!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?=h($title)?> · FIDEST IA</title><link rel="stylesheet" href="<?=h(dirname($base))?>/public/assets/admin.css"></head><body><aside><a class="brand" href="<?=h($base)?>">FIDEST <span>IA</span></a><nav><?php foreach($nav as $path=>$label):?><a class="<?=str_starts_with($route,$path)?'on':''?>" href="<?=h($base.'/'.$path)?>"><?=h($label)?></a><?php endforeach?></nav><a href="<?=h($base.'?logout=1')?>">Déconnexion</a></aside><main><header><div><span class="eyebrow">Administration</span><h1><?=h($title)?></h1></div><a class="button ghost" href="<?=h(dirname($base))?>/">Interface publique</a></header><?php }
+function footerPage():void{echo '</main></body></html>';}
+function dashboard(PDO $db,DocumentRepository $docs,ApiLogRepository $logs,ApiClientRepository $apps):void{$s=$docs->stats();$active=count(array_filter($apps->all(),fn($a)=>(int)$a['active']===1));$calls=(int)$db->query('SELECT COUNT(*) FROM api_request_logs WHERE DATE(created_at)=CURDATE()')->fetchColumn();?><div class="metrics"><?php foreach([['Analyses aujourd’hui',$s['today']??0],['Validations OK',$s['validated']??0],['Rejets',$s['rejected']??0],['Erreurs OCR',$s['errors']??0],['Applications actives',$active],['Appels API aujourd’hui',$calls]] as $m):?><div class="metric"><b><?=h((string)$m[1])?></b><span><?=h($m[0])?></span></div><?php endforeach?></div><section class="card"><h2>Dernières analyses</h2><?=tableDocs($docs->latest(8))?></section><section class="card"><h2>Derniers appels API</h2><?=tableLogs($logs->latest(8))?></section><?php }
+function applications(ApiClientRepository $repo,?array $key):void{if($key):?><div class="keybox"><b>Copiez cette clé maintenant — elle ne sera plus affichée.</b><code id="key"><?=h($key['key'])?></code><button onclick="navigator.clipboard.writeText(document.getElementById('key').textContent)">Copier</button></div><?php endif?><div class="split"><form class="card" method="post"><input type="hidden" name="_csrf" value="<?=h(Csrf::token())?>"><input type="hidden" name="action" value="create_app"><h2>Nouvelle application</h2><label>Nom<input name="name" required placeholder="FINEA Production"></label><label>Environnement<select name="environment"><option value="production">Production</option><option value="staging">Staging</option><option value="development">Développement</option></select></label><label>Description<textarea name="description"></textarea></label><label>Origine<input name="origin" placeholder="https://finea.example"></label><label>Limite/minute<input type="number" min="1" name="rate_limit" value="60"></label><label>Expiration<input type="datetime-local" name="expires_at"></label><label>Note<textarea name="notes"></textarea></label><fieldset><legend>Scopes</legend><?php foreach(ApiClientRepository::SCOPES as $s):?><label class="check"><input type="checkbox" name="scopes[]" value="<?=h($s)?>" <?=in_array($s,['documents:analyze','documents:read','documents:list','types:read'],true)?'checked':''?>><?=h($s)?></label><?php endforeach?></fieldset><button class="button">Créer la clé</button></form><section class="card grow"><h2>Applications</h2><div class="table"><table><tr><th>Application</th><th>Clé</th><th>Usage</th><th>Statut</th><th>Actions</th></tr><?php foreach($repo->all() as $a):?><tr><td><b><?=h($a['name'])?></b><small><?=h($a['environment'].' · '.($a['code']??''))?></small></td><td><code><?=h($a['key_prefix'])?>…<?=h($a['last_four']??'')?></code></td><td><?=h((string)($a['request_count']??0))?><small><?=h($a['last_used_at']??'Jamais')?></small></td><td><span class="pill"><?=(int)$a['active']===1?'Active':'Révoquée'?></span></td><td><div class="actions"><?php if((int)$a['active']===1):?><?=postButton('revoke_app',(int)$a['id'],'Révoquer','danger')?><?php endif?><?=postButton('regenerate_app',(int)$a['id'],'Régénérer','')?></div></td></tr><?php endforeach?></table></div></section></div><?php }
+function documents(DocumentRepository $repo,ApiClientRepository $apps,?string $uuid,string $base):void{if($uuid){$d=$repo->findByUuid($uuid);if(!$d){echo '<div class="error">Document introuvable.</div>';return;}?><section class="card"><h2><?=h($d['original_name'])?></h2><dl><dt>UUID</dt><dd><code><?=h($d['uuid'])?></code></dd><dt>Type</dt><dd><?=h($d['document_type_name']??'—')?></dd><dt>Statut / score</dt><dd><?=h($d['status'].' · '.($d['confidence']??'—'))?></dd><dt>SHA-256</dt><dd><code><?=h($d['sha256'])?></code></dd><dt>Source</dt><dd><?=h($d['application_name']??'Interface web')?></dd></dl><h3>Données extraites</h3><pre><?=h(json_encode(json_decode((string)$d['extracted_data'],true),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE))?></pre><h3>Texte OCR</h3><pre><?=h($d['extracted_text']??'')?></pre><h3>Validations</h3><pre><?=h(json_encode($d['validations'],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE))?></pre><h3>Historique</h3><pre><?=h(json_encode($d['history'],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE))?></pre></section><?php return;} $f=['q'=>$_GET['q']??'','status'=>$_GET['status']??'','document_type_id'=>$_GET['document_type_id']??'','api_client_id'=>$_GET['api_client_id']??'','from'=>$_GET['from']??'','to'=>$_GET['to']??''];?><form class="filters"><input name="q" value="<?=h($f['q'])?>" placeholder="Nom, UUID, référence"><select name="status"><option value="">Tous statuts</option><?php foreach(['processing','validated','rejected','error'] as $s):?><option <?=$f['status']===$s?'selected':''?>><?=h($s)?></option><?php endforeach?></select><input type="date" name="from" value="<?=h($f['from'])?>"><input type="date" name="to" value="<?=h($f['to'])?>"><button class="button">Filtrer</button></form><section class="card"><?=tableDocs($repo->search($f),$base)?></section><?php }
+function types(DocumentRepository $repo):void{?><div class="split"><form class="card" method="post"><input type="hidden" name="_csrf" value="<?=h(Csrf::token())?>"><input type="hidden" name="action" value="create_type"><h2>Nouveau type</h2><label>Nom<input name="name" required></label><label>Code<input name="code"></label><label>Description<textarea name="description"></textarea></label><label>Schéma JSON<textarea name="schema" rows="12">{"fields":[],"classification":{"keywords":[],"strong_keywords":[],"negative_keywords":[],"required_keywords":[],"minimum_score":2}}</textarea></label><button class="button">Créer</button></form><section class="card grow"><h2>Catalogue</h2><div class="table"><table><tr><th>Code</th><th>Nom</th><th>État</th><th>Schéma</th></tr><?php foreach($repo->allTypes(false) as $t):?><tr><td><code><?=h($t['code'])?></code></td><td><?=h($t['name'])?></td><td><?=(int)$t['active']===1?'Actif':'Inactif'?></td><td><details><summary>Afficher</summary><pre><?=h($t['extraction_schema']??'{}')?></pre></details></td></tr><?php endforeach?></table></div></section></div><?php }
+function rulesPage(ValidationRuleRepository $rules,DocumentRepository $docs):void{?><div class="split"><form class="card" method="post"><input type="hidden" name="_csrf" value="<?=h(Csrf::token())?>"><input type="hidden" name="action" value="create_rule"><h2>Nouvelle règle</h2><label>Type<select name="document_type_id"><?php foreach($docs->allTypes() as $t):?><option value="<?=$t['id']?>"><?=h($t['name'])?></option><?php endforeach?></select></label><label>Nom<input name="name" required></label><label>Contrôle<select name="rule_type"><?php foreach(['required_field','unique_field','unique_field_with_scope','regex','min','max','equals','in','custom'] as $t):?><option><?=h($t)?></option><?php endforeach?></select></label><label>Champ<input name="field_name"></label><label>Message d’erreur<input name="error_message" required></label><label>Sévérité<select name="severity"><option>error</option><option>warning</option><option>info</option></select></label><button class="button">Créer</button></form><section class="card grow"><h2>Règles</h2><div class="table"><table><tr><th>Type</th><th>Règle</th><th>Contrôle</th><th>Champ</th><th>État</th></tr><?php foreach($rules->all() as $r):?><tr><td><?=h($r['document_type_name'])?></td><td><?=h($r['name'])?></td><td><code><?=h($r['rule_type'])?></code></td><td><?=h($r['field_name']??'—')?></td><td><?=(int)$r['active']?'Active':'Inactive'?></td></tr><?php endforeach?></table></div></section></div><?php }
+function logsPage(ApiLogRepository $repo,ApiClientRepository $apps):void{$f=['api_client_id'=>$_GET['api_client_id']??'','route'=>$_GET['route']??'','status_code'=>$_GET['status_code']??'','date'=>$_GET['date']??''];?><form class="filters"><select name="api_client_id"><option value="">Toutes applications</option><?php foreach($apps->all() as $a):?><option value="<?=$a['id']?>" <?=$f['api_client_id']==$a['id']?'selected':''?>><?=h($a['name'])?></option><?php endforeach?></select><input name="route" value="<?=h($f['route'])?>" placeholder="Route"><input type="number" name="status_code" value="<?=h($f['status_code'])?>" placeholder="HTTP"><input type="date" name="date" value="<?=h($f['date'])?>"><button class="button">Filtrer</button></form><section class="card"><?=tableLogs($repo->latest(100,$f))?></section><?php }
+function systemPage(array $c,PDO $db,string $root):void{$disabled=array_map('trim',explode(',',(string)ini_get('disable_functions')));$exec=function_exists('exec')&&!in_array('exec',$disabled,true);$bin=function(string $b)use($exec):string{if(!$exec)return 'Indisponible';$o=[];$n=1;exec('command -v '.escapeshellarg($b).' 2>/dev/null',$o,$n);return $n===0?($o[0]??'Disponible'):'Indisponible';};$checks=['PHP 8.2+'=>version_compare(PHP_VERSION,'8.2','>='),'PDO'=>extension_loaded('pdo'),'Connexion MySQL'=>$db instanceof PDO,'fileinfo'=>extension_loaded('fileinfo'),'Stockage writable'=>is_writable($c['storage']['documents_path'])||is_writable(dirname($c['storage']['documents_path'])),'Migrations'=>isset($c['migrations_applied']),'Tesseract'=>$bin($c['ocr']['binary'])!=='Indisponible','Langue fra'=>str_contains($c['ocr']['languages'],'fra'),'Langue eng'=>str_contains($c['ocr']['languages'],'eng'),'Poppler'=>$bin('pdftoppm')!=='Indisponible','exec'=>$exec,'proc_open'=>function_exists('proc_open')&&!in_array('proc_open',$disabled,true),'API activée'=>$c['api']['enabled']];?><section class="card"><div class="checks-grid"><?php foreach($checks as $k=>$v):?><div><span class="dot <?=$v?'ok':'bad'?>"></span><b><?=h($k)?></b><small><?=$v?'Disponible':'Indisponible'?></small></div><?php endforeach?></div><dl><dt>PHP</dt><dd><?=h(PHP_VERSION)?></dd><dt>Upload max</dt><dd><?=h((string)ini_get('upload_max_filesize'))?></dd><dt>Stockage</dt><dd><?=h($c['storage']['documents_path'])?></dd><dt>Environnement</dt><dd><?=h($c['app']['env'])?></dd></dl></section><?php }
+function documentation(array $c):void{$url=rtrim($c['app']['url'],'/').'/api/v1';?><section class="card"><p>URL de base : <code><?=h($url)?></code></p><div class="table"><table><tr><th>Méthode</th><th>Endpoint</th><th>Scope</th></tr><?php foreach([['GET','/health','Public'],['POST','/documents/analyze','documents:analyze'],['GET','/documents','documents:list'],['GET','/documents/{uuid}','documents:read'],['GET','/document-types','types:read'],['POST','/document-types','types:write'],['GET','/validation-rules','rules:read'],['POST','/validation-rules','rules:write']] as $e):?><tr><td><?=h($e[0])?></td><td><code><?=h($e[1])?></code></td><td><code><?=h($e[2])?></code></td></tr><?php endforeach?></table></div><h2>Exemple cURL</h2><pre>curl -X POST '<?=h($url)?>/documents/analyze' \
+  -H 'Authorization: Bearer fia_live_xxxxxxxxx' \
+  -F 'document=@facture.pdf' \
+  -F 'document_type=AUTO' \
+  -F 'client_reference=FINEA-123'</pre></section><?php }
+function tableDocs(array $rows,?string $base=null):string{ob_start();?><div class="table"><table><tr><th>UUID / fichier</th><th>Type</th><th>Référence</th><th>Statut</th><th>Source</th><th>Date</th></tr><?php foreach($rows as $d):?><tr><td><?php if($base):?><a href="<?=h($base.'/documents/'.$d['uuid'])?>"><?php endif?><code><?=h($d['uuid'])?></code><small><?=h($d['original_name'])?> · <?=h((string)$d['file_size'])?> o</small><?php if($base):?></a><?php endif?></td><td><?=h($d['document_type_name']??'—')?></td><td><?=h($d['client_reference']??'—')?></td><td><span class="pill"><?=h($d['status'])?></span></td><td><?=h($d['application_name']??'Web')?></td><td><?=h($d['created_at'])?></td></tr><?php endforeach?></table></div><?php return (string)ob_get_clean();}
+function tableLogs(array $rows):string{ob_start();?><div class="table"><table><tr><th>Requête</th><th>Application</th><th>Route</th><th>HTTP</th><th>Durée</th><th>Date</th></tr><?php foreach($rows as $l):?><tr><td><code><?=h($l['request_id'])?></code></td><td><?=h($l['application_name']??'Public/Master')?></td><td><?=h($l['method'].' '.$l['route'])?></td><td><?=h((string)$l['status_code'])?></td><td><?=h((string)$l['duration_ms'])?> ms</td><td><?=h($l['created_at'])?></td></tr><?php endforeach?></table></div><?php return (string)ob_get_clean();}
+function postButton(string $action,int $id,string $label,string $class):string{return '<form method="post"><input type="hidden" name="_csrf" value="'.h(Csrf::token()).'"><input type="hidden" name="action" value="'.h($action).'"><input type="hidden" name="id" value="'.$id.'"><button class="button small '.h($class).'">'.h($label).'</button></form>';}
+function h(mixed $v):string{return htmlspecialchars((string)$v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}

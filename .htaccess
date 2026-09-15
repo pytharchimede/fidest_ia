@@ -10,6 +10,7 @@ DirectoryIndex index.php
 
     # Administration interface.
     RewriteRule ^admin/?$ public/admin/index.php [L,QSA]
+    RewriteRule ^admin/(.*)$ public/admin/index.php?_route=$1 [L,QSA]
 
     # Professional versioned API routes.
     RewriteRule ^api/v1/(.*)$ public/api/v1/index.php?_route=$1 [L,QSA]
