@@ -12,6 +12,8 @@ Exemples de routes :
 
 ```text
 POST /api/v1/documents/analyze
+POST /api/v1/documents
+GET  /api/v1/documents/{uuid}/analysis
 GET  /api/v1/document-types
 POST /api/v1/document-types
 GET  /api/v1/health
@@ -192,6 +194,8 @@ Ne pas confondre :
 
 - `success=true` : traitement technique réussi ;
 - `validation.valid=true` : règles métier satisfaites.
+
+La réponse conserve ces champs et ajoute de manière rétrocompatible `raw_text`, `normalized_text`, `fields` avec score/source, `anomalies`, `scores`, `pages` et `metadata`. `POST /api/v1/documents` est un alias professionnel de la route d'analyse existante ; `GET /api/v1/documents/{uuid}/analysis` expose le résultat stocké.
 
 ## 2. Lister les types documentaires
 

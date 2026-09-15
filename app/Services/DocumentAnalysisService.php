@@ -8,6 +8,7 @@ use FidestIA\Contracts\OcrEngineInterface;
 use FidestIA\Repositories\DocumentRepository;
 use FidestIA\Repositories\ValidationRuleRepository;
 use RuntimeException;
+use FidestIA\Services\DocumentIntelligence\{AnomalyDetector,ConfidenceCalculator,TextNormalizer};
 
 final class DocumentAnalysisService
 {
@@ -51,9 +52,10 @@ final class DocumentAnalysisService
 
         try {
             $ocr = $this->ocr->extract($stored['absolute_path'], $stored['mime_type']);
+            $normalizedText=(new TextNormalizer())->normalize($ocr['text']);
 
             if ($auto) {
-                $detected = $this->classifier->classify($ocr['text'], $this->documents->allTypes(true));
+                $detected = $this->classifier->classify($normalizedText, $this->documents->allTypes(true));
                 if ($detected) {
                     $type = $detected;
                     $this->documents->updateDocumentType($documentId, (int) $type['id']);
@@ -61,7 +63,8 @@ final class DocumentAnalysisService
             }
 
             $schema = json_decode((string) ($type['extraction_schema'] ?? '{}'), true) ?: [];
-            $data = $this->extractor->extract($ocr['text'], $type['code'], $schema);
+            $data = $this->extractor->extract($normalizedText, $type['code'], $schema);
+            $fieldsWithConfidence=$this->extractor->extractWithConfidence($normalizedText,$type['code']);
             if ($type['code'] === 'GENERAL') {
                 $data = [
                     'title' => $this->firstUsefulLine($ocr['text']),
@@ -72,6 +75,8 @@ final class DocumentAnalysisService
 
             $rules = $this->rules->forDocumentType((int) $type['id']);
             $validation = $this->validator->validate((int) $type['id'], $data, $rules);
+            $anomalies=(new AnomalyDetector())->detect($fieldsWithConfidence,(string)$type['code'],$ocr['confidence'],$type['classification_confidence']??null);
+            $scores=(new ConfidenceCalculator())->calculate($ocr['confidence'],$type['classification_confidence']??null,$fieldsWithConfidence,$validation,$anomalies);
             $status = $validation['valid'] ? 'validated' : 'rejected';
 
             foreach ($validation['results'] as $result) {
@@ -86,6 +91,7 @@ final class DocumentAnalysisService
             }
 
             $this->documents->updateAnalysis($documentId, $ocr['text'], $data, $status, $ocr['confidence']);
+            $this->documents->updateIntelligence($documentId,$normalizedText,$anomalies,$scores);
 
             return [
                 'success' => true,
@@ -111,6 +117,15 @@ final class DocumentAnalysisService
                     'confidence' => $ocr['confidence'],
                     'text' => $ocr['text'],
                 ],
+                'engine' => $ocr['meta']['engine'] ?? 'unknown',
+                'raw_text' => $ocr['text'],
+                'normalized_text' => $normalizedText,
+                'fields' => $fieldsWithConfidence,
+                'anomalies' => $anomalies,
+                'scores' => $scores,
+                'warnings' => array_values(array_filter($anomalies,fn(array $a):bool=>$a['severity']!=='info')),
+                'pages' => $ocr['meta']['page_results'] ?? [],
+                'metadata' => $ocr['meta'],
                 'data' => $data,
                 'validation' => $validation,
             ];

@@ -6,10 +6,12 @@ namespace FidestIA\Services;
 
 final class DocumentExtractionService
 {
+    public function __construct(private readonly ?\FidestIA\Services\DocumentIntelligence\ExtractorRegistry $registry=null){}
     public function extract(string $text, string $documentTypeCode, array $schema = []): array
     {
         $clean = preg_replace('/[\t ]+/', ' ', $text) ?? $text;
         $data = [];
+        $structured=($this->registry??new \FidestIA\Services\DocumentIntelligence\ExtractorRegistry())->for($documentTypeCode)->extract($clean);
 
         if ($documentTypeCode === 'FNE_INVOICE') {
             $data['invoice_number'] = $this->match($clean, [
@@ -48,8 +50,11 @@ final class DocumentExtractionService
             $data[$field]=$this->normalizeValue($value,$normalizer);
         }
 
+        foreach($structured as $name=>$field)if($field!==null&&!array_key_exists($name,$data))$data[$name]=$field['value'];
         return array_filter($data, static fn ($value) => $value !== null && $value !== '');
     }
+
+    public function extractWithConfidence(string $text,string $documentTypeCode):array{return ($this->registry??new \FidestIA\Services\DocumentIntelligence\ExtractorRegistry())->for($documentTypeCode)->extract($text);}
 
     private function normalizeValue(?string $value,string $type):mixed
     {
