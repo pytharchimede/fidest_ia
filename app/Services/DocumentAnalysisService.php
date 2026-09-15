@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace FidestIA\Services;
 
 use FidestIA\Contracts\OcrEngineInterface;
@@ -19,7 +21,7 @@ final class DocumentAnalysisService
         private readonly ValidationRuleRepository $rules
     ) {}
 
-    public function analyze(array $file, string $documentTypeCode, ?string $clientReference = null): array
+    public function analyze(array $file, string $documentTypeCode, ?string $clientReference = null, ?int $apiClientId = null): array
     {
         $auto = strtoupper($documentTypeCode) === 'AUTO';
         $type = $auto
@@ -36,6 +38,7 @@ final class DocumentAnalysisService
         $documentId = $this->documents->create([
             'uuid' => $uuid,
             'document_type_id' => (int) $type['id'],
+            'api_client_id' => $apiClientId,
             'client_reference' => $clientReference,
             'original_name' => $stored['original_name'],
             'stored_name' => $stored['stored_name'],
@@ -92,6 +95,7 @@ final class DocumentAnalysisService
                 'classification' => [
                     'automatic' => $auto,
                     'score' => $type['classification_score'] ?? null,
+                    'confidence' => $type['classification_confidence'] ?? null,
                     'signals' => $type['classification_signals'] ?? [],
                     'fallback_to_general' => $auto && ($type['code'] ?? '') === 'GENERAL',
                 ],

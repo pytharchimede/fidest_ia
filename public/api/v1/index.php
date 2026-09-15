@@ -1,130 +1,31 @@
 <?php
-
 declare(strict_types=1);
-
-use FidestIA\Core\ApiAuth;
-use FidestIA\Core\Database;
-use FidestIA\Repositories\DocumentRepository;
-use FidestIA\Repositories\ValidationRuleRepository;
-use FidestIA\Services\DocumentAnalysisService;
-use FidestIA\Services\DocumentClassifierService;
-use FidestIA\Services\DocumentExtractionService;
-use FidestIA\Services\DocumentStorageService;
+use FidestIA\Core\{ApiAuth,ApiException,Database};
+use FidestIA\Repositories\{ApiLogRepository,DocumentRepository,ValidationRuleRepository};
+use FidestIA\Services\{DocumentAnalysisService,DocumentClassifierService,DocumentExtractionService,DocumentStorageService,ValidationEngine};
 use FidestIA\Services\Ocr\TesseractOcrService;
-use FidestIA\Services\ValidationEngine;
-
-$root = dirname(__DIR__, 3);
-$config = require $root . '/bootstrap.php';
-
-header('Content-Type: application/json; charset=utf-8');
-ApiAuth::applyCors($config);
-
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
-
-try {
-    $route = '/' . trim((string) ($_GET['_route'] ?? ''), '/');
-    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
-    $db = Database::connection($config);
-    $documents = new DocumentRepository($db);
-
-    if ($method === 'GET' && $route === '/health') {
-        $client = ApiAuth::authenticate($config, $db, null);
-        respond(200, [
-            'success' => true,
-            'service' => 'FIDEST IA',
-            'api_version' => 'v1',
-            'status' => 'ok',
-            'client' => ['name' => $client['name'] ?? null, 'scopes' => $client['scopes'] ?? []],
-        ]);
+$root=dirname(__DIR__,3);$config=require $root.'/bootstrap.php';header('Content-Type: application/json; charset=utf-8');ApiAuth::applyCors($config);
+if(($_SERVER['REQUEST_METHOD']??'GET')==='OPTIONS'){http_response_code(204);exit;}
+$started=microtime(true);$requestId=uuid();$route='/'.trim((string)($_GET['_route']??''),'/');$method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));$client=null;$documentUuid=null;$errorCode=null;$status=500;
+try{
+    $db=Database::connection($config);$documents=new DocumentRepository($db);$rules=new ValidationRuleRepository($db);
+    if($method==='GET'&&$route==='/health')respond(200,['success'=>true,'data'=>['service'=>'FIDEST IA','api_version'=>'v1','status'=>'ok'],'meta'=>['request_id'=>$requestId]]);
+    $scope=match(true){$route==='/documents/analyze'=>'documents:analyze',$route==='/documents'=>'documents:list',preg_match('#^/documents/[0-9a-f-]{36}$#i',$route)===1=>'documents:read',$route==='/document-types'&&$method==='GET'=>'types:read',$route==='/document-types'&&$method==='POST'=>'types:write',$route==='/validation-rules'&&$method==='GET'=>'rules:read',$route==='/validation-rules'&&$method==='POST'=>'rules:write',default=>throw new ApiException(404,'NOT_FOUND','Route API introuvable.')};
+    $client=ApiAuth::authenticate($config,$db,$scope);
+    if($route==='/documents'&&$method==='GET')respond(200,['success'=>true,'data'=>$documents->search(['q'=>trim((string)($_GET['q']??'')),'status'=>trim((string)($_GET['status']??''))],min(100,max(1,(int)($_GET['limit']??50)))),'meta'=>['request_id'=>$requestId]]);
+    if($method==='GET'&&preg_match('#^/documents/([0-9a-f-]{36})$#i',$route,$m)){$doc=$documents->findByUuid($m[1]);if(!$doc)throw new ApiException(404,'DOCUMENT_NOT_FOUND','Document introuvable.');$doc['extracted_data']=json_decode((string)($doc['extracted_data']??'{}'),true)?:[];respond(200,['success'=>true,'data'=>$doc,'meta'=>['request_id'=>$requestId]]);}
+    if($route==='/document-types'&&$method==='GET')respond(200,['success'=>true,'data'=>array_map('publicType',$documents->allTypes(true)),'meta'=>['request_id'=>$requestId]]);
+    if($route==='/document-types'&&$method==='POST'){$p=payload();$name=trim((string)($p['name']??''));if($name==='')throw new ApiException(422,'INVALID_DOCUMENT_TYPE','Le nom est requis.');$code=typeCode((string)($p['code']??$name));$id=$documents->createType(['code'=>$code,'name'=>$name,'description'=>$p['description']??null,'extraction_schema'=>$p['extraction_schema']??['fields'=>$p['fields']??[],'classification'=>['keywords'=>$p['keywords']??[]]]]);respond(201,['success'=>true,'data'=>['id'=>$id,'code'=>$code],'meta'=>['request_id'=>$requestId]]);}
+    if($route==='/validation-rules'&&$method==='GET')respond(200,['success'=>true,'data'=>$rules->all(),'meta'=>['request_id'=>$requestId]]);
+    if($route==='/validation-rules'&&$method==='POST'){$p=payload();foreach(['document_type_id','name','rule_type','error_message'] as $f)if(empty($p[$f]))throw new ApiException(422,'INVALID_RULE',"Champ requis : $f");$id=$rules->create($p);respond(201,['success'=>true,'data'=>['id'=>$id],'meta'=>['request_id'=>$requestId]]);}
+    if($route==='/documents/analyze'&&$method==='POST'){
+        if(!isset($_FILES['document']))throw new ApiException(422,'INVALID_DOCUMENT','Le champ document est requis.');$max=(int)($config['storage']['max_upload_mb']??15);if((int)($_FILES['document']['size']??0)>$max*1048576)throw new ApiException(422,'DOCUMENT_TOO_LARGE',"Taille maximale : $max Mo.");
+        $service=new DocumentAnalysisService(new DocumentStorageService($config['storage']['documents_path']),new TesseractOcrService($config['ocr']['binary'],$config['ocr']['languages']),new DocumentExtractionService(),new DocumentClassifierService(),new ValidationEngine($documents),$documents,$rules);
+        $result=$service->analyze($_FILES['document'],trim((string)($_POST['document_type']??'AUTO'))?:'AUTO',isset($_POST['client_reference'])?trim((string)$_POST['client_reference']):null,$client['id']??null);$documentUuid=$result['uuid'];respond(200,['success'=>true,'data'=>$result,'meta'=>['request_id'=>$requestId]]);
     }
-
-    if ($route === '/document-types' && $method === 'GET') {
-        ApiAuth::authenticate($config, $db, 'types:read');
-        $types = array_map(static function (array $type): array {
-            $schema = json_decode((string) ($type['extraction_schema'] ?? '{}'), true) ?: [];
-            return [
-                'id' => (int) $type['id'],
-                'code' => $type['code'],
-                'name' => $type['name'],
-                'description' => $type['description'],
-                'fields' => $schema['fields'] ?? [],
-                'keywords' => $schema['keywords'] ?? [],
-            ];
-        }, $documents->allTypes(true));
-
-        respond(200, ['success' => true, 'data' => $types]);
-    }
-
-    if ($route === '/document-types' && $method === 'POST') {
-        ApiAuth::authenticate($config, $db, 'types:write');
-        $payload = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
-        $name = trim((string) ($payload['name'] ?? ''));
-        if ($name === '') {
-            throw new RuntimeException('Le nom du type est requis.');
-        }
-
-        $code = trim((string) ($payload['code'] ?? ''));
-        if ($code === '') {
-            $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name) ?: $name;
-            $code = trim(strtoupper((string) preg_replace('/[^A-Z0-9]+/i', '_', $ascii)), '_');
-        }
-        if ($code === '' || in_array($code, ['AUTO', 'GENERAL'], true)) {
-            throw new RuntimeException('Code de type invalide ou réservé.');
-        }
-
-        $fields = array_values(array_filter(array_map('trim', (array) ($payload['fields'] ?? []))));
-        $keywords = array_values(array_filter(array_map('trim', (array) ($payload['keywords'] ?? []))));
-
-        $id = $documents->createType([
-            'code' => $code,
-            'name' => $name,
-            'description' => $payload['description'] ?? null,
-            'extraction_schema' => ['fields' => $fields, 'keywords' => $keywords],
-        ]);
-
-        respond(201, ['success' => true, 'id' => $id, 'code' => $code]);
-    }
-
-    if ($route === '/documents/analyze' && $method === 'POST') {
-        ApiAuth::authenticate($config, $db, 'documents:analyze');
-
-        if (!isset($_FILES['document'])) {
-            throw new RuntimeException('Le champ document est requis.');
-        }
-
-        $maxUploadMb = (int) ($config['storage']['max_upload_mb'] ?? 15);
-        if ((int) ($_FILES['document']['size'] ?? 0) > ($maxUploadMb * 1024 * 1024)) {
-            throw new RuntimeException("Le document dépasse la taille maximale autorisée de {$maxUploadMb} Mo.");
-        }
-
-        $rules = new ValidationRuleRepository($db);
-        $service = new DocumentAnalysisService(
-            new DocumentStorageService($config['storage']['documents_path'] ?? $root . '/storage/documents'),
-            new TesseractOcrService($config['ocr']['binary'] ?? 'tesseract', $config['ocr']['languages'] ?? 'fra+eng'),
-            new DocumentExtractionService(),
-            new DocumentClassifierService(),
-            new ValidationEngine($documents),
-            $documents,
-            $rules
-        );
-
-        $typeCode = trim((string) ($_POST['document_type'] ?? 'AUTO')) ?: 'AUTO';
-        $clientReference = isset($_POST['client_reference']) ? trim((string) $_POST['client_reference']) : null;
-
-        respond(200, $service->analyze($_FILES['document'], $typeCode, $clientReference));
-    }
-
-    respond(404, ['success' => false, 'error' => 'Route API introuvable.']);
-} catch (Throwable $e) {
-    respond(422, ['success' => false, 'error' => $e->getMessage()]);
-}
-
-function respond(int $status, array $payload): never
-{
-    http_response_code($status);
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    exit;
-}
+}catch(ApiException $e){$status=$e->status;$errorCode=$e->errorCode;respond($status,['success'=>false,'error'=>['code'=>$errorCode,'message'=>$e->getMessage()],'meta'=>['request_id'=>$requestId]]);}catch(Throwable $e){$status=500;$errorCode='INTERNAL_ERROR';$message=($config['app']['debug']??false)?$e->getMessage():'Une erreur interne est survenue.';respond(500,['success'=>false,'error'=>['code'=>$errorCode,'message'=>$message],'meta'=>['request_id'=>$requestId]]);}
+function respond(int $code,array $body):never{global $db,$client,$requestId,$method,$route,$started,$documentUuid,$errorCode;$status=$code;try{if(isset($db))(new ApiLogRepository($db))->record(['api_client_id'=>$client['id']??null,'request_id'=>$requestId,'method'=>$method,'route'=>$route,'status_code'=>$code,'duration_ms'=>(int)((microtime(true)-$started)*1000),'ip_address'=>$_SERVER['REMOTE_ADDR']??null,'user_agent'=>mb_substr((string)($_SERVER['HTTP_USER_AGENT']??''),0,500),'document_uuid'=>$documentUuid,'error_code'=>$errorCode]);}catch(Throwable){}http_response_code($code);echo json_encode($body,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);exit;}
+function payload():array{$data=json_decode(file_get_contents('php://input')?:'{}',true);return is_array($data)?$data:[];}
+function typeCode(string $v):string{$a=iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$v)?:$v;$c=trim(strtoupper((string)preg_replace('/[^A-Z0-9]+/i','_',$a)),'_');if($c===''||in_array($c,['AUTO','GENERAL'],true))throw new ApiException(422,'INVALID_DOCUMENT_TYPE','Code invalide ou réservé.');return $c;}
+function publicType(array $t):array{$s=json_decode((string)($t['extraction_schema']??'{}'),true)?:[];return ['id'=>(int)$t['id'],'code'=>$t['code'],'name'=>$t['name'],'description'=>$t['description'],'extraction_schema'=>$s];}
+function uuid():string{$d=random_bytes(16);$d[6]=chr((ord($d[6])&15)|64);$d[8]=chr((ord($d[8])&63)|128);return vsprintf('%s%s-%s-%s-%s-%s%s%s',str_split(bin2hex($d),4));}

@@ -6,14 +6,13 @@ namespace FidestIA\Core;
 
 use FidestIA\Repositories\ApiClientRepository;
 use PDO;
-use RuntimeException;
 
 final class ApiAuth
 {
     public static function authenticate(array $config, PDO $db, ?string $requiredScope = null): array
     {
         if (!(bool) ($config['api']['enabled'] ?? true)) {
-            throw new RuntimeException('API désactivée.');
+            throw new ApiException(503, 'API_DISABLED', 'API désactivée.');
         }
 
         $token = self::bearerToken();
@@ -30,14 +29,18 @@ final class ApiAuth
 
         $repository = new ApiClientRepository($db);
         $client = $repository->findByPlainKey($token);
-        if (!$client) {
-            self::unauthorized('Clé API invalide, expirée ou révoquée.');
-        }
+        if (!$client) throw new ApiException(401, 'INVALID_API_KEY', 'Clé API invalide.');
+        if (!(bool) $client['active'] || $client['revoked_at'] !== null) throw new ApiException(401, 'REVOKED_API_KEY', 'Clé API révoquée.');
+        if ($client['expires_at'] !== null && strtotime((string) $client['expires_at']) <= time()) throw new ApiException(401, 'EXPIRED_API_KEY', 'Clé API expirée.');
 
         $scopes = json_decode((string) ($client['scopes'] ?? '[]'), true) ?: [];
         if ($requiredScope !== null && !in_array('*', $scopes, true) && !in_array($requiredScope, $scopes, true)) {
-            self::forbidden('Cette clé API ne possède pas le scope requis : ' . $requiredScope);
+            throw new ApiException(403, 'INSUFFICIENT_SCOPE', 'Scope requis : ' . $requiredScope);
         }
+
+        $rate = $repository->consumeRateLimit((int) $client['id'], (int) ($client['rate_limit_per_minute'] ?? 60));
+        header('X-RateLimit-Limit: ' . $rate['limit']); header('X-RateLimit-Remaining: ' . $rate['remaining']);
+        if (!$rate['allowed']) { header('Retry-After: ' . $rate['retry_after']); throw new ApiException(429, 'RATE_LIMIT_EXCEEDED', 'Limite de requêtes atteinte.'); }
 
         $repository->touchLastUsed((int) $client['id']);
 
@@ -77,30 +80,15 @@ final class ApiAuth
         }
 
         if (!preg_match('/^Bearer\s+(.+)$/i', trim($header), $matches)) {
-            self::unauthorized('Clé API Bearer requise.');
+            throw new ApiException(401, 'MISSING_API_KEY', 'Clé API Bearer requise.');
         }
 
         $token = trim((string) ($matches[1] ?? ''));
         if ($token === '') {
-            self::unauthorized('Clé API Bearer requise.');
+            throw new ApiException(401, 'MISSING_API_KEY', 'Clé API Bearer requise.');
         }
 
         return $token;
     }
 
-    private static function unauthorized(string $message): never
-    {
-        http_response_code(401);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['success' => false, 'error' => $message], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        exit;
-    }
-
-    private static function forbidden(string $message): never
-    {
-        http_response_code(403);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['success' => false, 'error' => $message], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        exit;
-    }
 }
