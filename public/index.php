@@ -8,27 +8,40 @@
 <style>
 :root{--text:#202124;--muted:#5f6368;--line:#dadce0;--soft:#f8f9fa;--blue:#1a73e8;--blue2:#1967d2;--ok:#137333;--bad:#b3261e}
 *{box-sizing:border-box;min-width:0}html,body{margin:0;max-width:100%;overflow-x:hidden}body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:var(--text)}button,input,select,textarea{font:inherit}
-.topbar{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #f1f3f4}.brand{font-size:20px;font-weight:600;letter-spacing:-.3px}.brand span{color:var(--blue)}.top-actions{display:flex;align-items:center;gap:8px;overflow:auto}.link-btn{border:0;background:transparent;color:var(--muted);padding:9px 12px;border-radius:20px;cursor:pointer;text-decoration:none;white-space:nowrap}.link-btn:hover{background:var(--soft);color:var(--text)}
+.topbar{min-height:64px;display:flex;align-items:center;gap:28px;padding:0 24px;border-bottom:1px solid #f1f3f4}.brand{font-size:20px;font-weight:600;letter-spacing:-.3px;white-space:nowrap}.brand span{color:var(--blue)}.main-nav{display:flex;align-items:center;gap:4px;flex:1}.nav-link,.link-btn{border:0;background:transparent;color:var(--muted);padding:9px 12px;border-radius:9px;cursor:pointer;text-decoration:none;white-space:nowrap}.nav-link:hover,.link-btn:hover{background:var(--soft);color:var(--text)}.nav-link.active{color:var(--blue);background:#e8f0fe}.top-actions{display:flex;align-items:center;gap:8px}.admin-link{border:1px solid var(--line);color:var(--text)}.mobile-nav{display:none;position:relative}.mobile-nav summary{list-style:none;border:1px solid var(--line);border-radius:9px;padding:8px 12px;cursor:pointer}.mobile-nav summary::-webkit-details-marker{display:none}.mobile-menu{position:absolute;right:0;top:46px;width:230px;padding:8px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(60,64,67,.18);z-index:20}.mobile-menu a{display:block;color:var(--text);text-decoration:none;padding:11px;border-radius:8px}.mobile-menu a:hover{background:var(--soft)}
 .page{width:min(760px,calc(100% - 32px));margin:0 auto;padding:64px 0 52px}.hero{text-align:center;margin-bottom:34px}.hero h1{font-size:clamp(34px,6vw,54px);font-weight:500;letter-spacing:-1.8px;margin:0 0 14px}.hero p{margin:0 auto;color:var(--muted);font-size:16px;line-height:1.6;max-width:610px}
 .card{border:1px solid var(--line);border-radius:24px;padding:24px;background:#fff}.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:170px;border:1px dashed #c4c7c5;border-radius:18px;background:#fff;cursor:pointer;padding:24px;text-align:center;transition:.15s}.drop:hover{background:var(--soft);border-color:#9aa0a6}.drop-icon{width:48px;height:48px;border-radius:50%;background:#e8f0fe;color:var(--blue);display:grid;place-items:center;font-size:24px;margin-bottom:13px}.drop strong{font-size:16px;font-weight:500;overflow-wrap:anywhere}.drop small{margin-top:7px;color:var(--muted);font-size:13px;line-height:1.45}input[type=file]{display:none}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}.field{display:flex;flex-direction:column;gap:7px}.field label{font-size:12px;color:var(--muted);font-weight:600}.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);outline:none}.field input,.field select{height:46px;padding:0 12px}.field textarea{min-height:88px;padding:12px;resize:vertical}.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
 .primary{width:100%;height:46px;border:0;border-radius:23px;background:var(--blue);color:#fff;font-weight:600;cursor:pointer;margin-top:18px}.primary:hover{background:var(--blue2)}.primary:disabled{opacity:.55;cursor:default}.helper{text-align:center;color:var(--muted);font-size:12px;margin-top:14px}
 .result{display:none;margin-top:22px;border-top:1px solid var(--line);padding-top:20px}.result-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}.result-head strong{font-size:15px}.status{font-size:12px;padding:5px 9px;border-radius:999px;background:var(--soft);color:var(--muted)}.status.ok{background:#e6f4ea;color:var(--ok)}.status.bad{background:#fce8e6;color:var(--bad)}pre{margin:0;width:100%;max-width:100%;max-height:430px;overflow-y:auto;overflow-x:hidden;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:var(--soft);border:1px solid #eef0f1;border-radius:14px;padding:16px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#3c4043}.exports{display:none;gap:8px;flex-wrap:wrap;margin-top:12px}.secondary{border:1px solid var(--line);background:#fff;color:#3c4043;border-radius:20px;padding:9px 13px;cursor:pointer}.secondary:hover{background:var(--soft)}
 .footer{text-align:center;color:#9aa0a6;font-size:12px;margin-top:30px}.modal{position:fixed;inset:0;background:rgba(32,33,36,.38);display:none;place-items:center;padding:18px;z-index:50}.modal.open{display:grid}.modal-card{width:min(600px,100%);max-height:calc(100vh - 36px);overflow:auto;background:#fff;border-radius:24px;padding:24px;box-shadow:0 12px 44px rgba(60,64,67,.24)}.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.modal-head h2{font-size:20px;margin:0;font-weight:500}.close{border:0;background:transparent;width:38px;height:38px;border-radius:50%;font-size:24px;cursor:pointer}.close:hover{background:var(--soft)}.hint,.success-note,.error-note{font-size:12px;line-height:1.5}.hint{color:var(--muted)}.success-note{color:var(--ok);margin-top:10px}.error-note{color:var(--bad);margin-top:10px}
-@media(max-width:680px){.topbar{height:56px;padding:0 14px}.page{width:min(100% - 20px,760px);padding:38px 0}.hero{margin-bottom:24px}.hero h1{font-size:36px}.hero p{font-size:15px}.card{padding:16px;border-radius:20px}.drop{min-height:145px}.form-grid{grid-template-columns:1fr}.exports .secondary{flex:1 1 calc(50% - 8px)}}
-@media(max-width:420px){.brand{font-size:18px}.top-actions .link-btn:first-child{display:none}.page{padding-top:28px}.hero h1{font-size:32px;letter-spacing:-1px}.exports .secondary{flex:1 1 100%}}
+@media(max-width:850px){.topbar{min-height:56px;padding:0 14px;justify-content:space-between}.main-nav,.top-actions{display:none}.mobile-nav{display:block}.page{width:min(100% - 20px,760px);padding:38px 0}.hero{margin-bottom:24px}.hero h1{font-size:36px}.hero p{font-size:15px}.card{padding:16px;border-radius:20px}.drop{min-height:145px}.form-grid{grid-template-columns:1fr}.exports .secondary{flex:1 1 calc(50% - 8px)}}
+@media(max-width:420px){.brand{font-size:18px}.page{padding-top:28px}.hero h1{font-size:32px;letter-spacing:-1px}.exports .secondary{flex:1 1 100%}}
 </style>
 </head>
 <body>
 <header class="topbar">
   <div class="brand">FIDEST <span>IA</span></div>
+  <nav class="main-nav" aria-label="Navigation principale">
+    <a class="nav-link active" href="./">Analyser</a>
+    <a class="nav-link" href="admin/documents">Documents</a>
+    <a class="nav-link" href="admin/document-types">Types documentaires</a>
+    <a class="nav-link" href="admin/documentation">Documentation API</a>
+  </nav>
   <div class="top-actions">
-    <a class="link-btn" href="admin/documents">Documents</a>
-    <a class="link-btn" href="admin/document-types">Types</a>
-    <a class="link-btn" href="admin/documentation">Documentation API</a>
-    <a class="link-btn" href="admin">Administration</a>
     <button class="link-btn" type="button" id="openTypeModal">Créer un type</button>
+    <a class="link-btn admin-link" href="admin">Administration</a>
   </div>
+  <details class="mobile-nav">
+    <summary aria-label="Ouvrir le menu">☰ Menu</summary>
+    <nav class="mobile-menu">
+      <a href="./">Analyser un document</a>
+      <a href="admin/documents">Documents</a>
+      <a href="admin/document-types">Types documentaires</a>
+      <a href="admin/documentation">Documentation API</a>
+      <a href="admin">Administration</a>
+    </nav>
+  </details>
 </header>
 
 <main class="page">

@@ -4,5 +4,8 @@ DirectoryIndex index.php
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    RewriteRule ^admin/?$ admin/index.php [L,QSA]
+    RewriteRule ^admin/(.*)$ admin/index.php?_route=$1 [L,QSA]
+
     RewriteRule ^api/v1/(.*)$ api/v1/index.php?_route=$1 [L,QSA]
 </IfModule>
