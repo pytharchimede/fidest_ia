@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace FidestIA\Services;
 
 final class DocumentExtractionService
@@ -29,21 +31,37 @@ final class DocumentExtractionService
             $data[$field] = $this->labeledValue($clean, $field === 'client_name' ? ['client', 'destinataire'] : ['fournisseur', 'vendeur']);
         }
 
-        foreach (($schema['fields'] ?? []) as $field) {
-            $field = trim((string) $field);
+        foreach (($schema['fields'] ?? []) as $definition) {
+            $field = is_array($definition) ? trim((string)($definition['name']??'')) : trim((string)$definition);
             if ($field === '' || array_key_exists($field, $data)) {
                 continue;
             }
-
-            $labels = array_unique([
+            $labels = array_unique(array_merge((array)(is_array($definition)?($definition['labels']??[]):[]),(array)(is_array($definition)?($definition['aliases']??[]):[]),[
                 $field,
                 str_replace('_', ' ', $field),
                 str_replace(['_', '-'], ' ', mb_strtolower($field)),
-            ]);
-            $data[$field] = $this->labeledValue($clean, $labels);
+            ]));
+            $value=null;
+            foreach((array)(is_array($definition)?($definition['regex']??[]):[]) as $pattern){$value=$this->match($clean,[(string)$pattern]);if($value!==null)break;}
+            $value ??= $this->labeledValue($clean,$labels);
+            $normalizer=is_array($definition)?(string)($definition['normalizer']??$definition['type']??'whitespace'):'whitespace';
+            $data[$field]=$this->normalizeValue($value,$normalizer);
         }
 
         return array_filter($data, static fn ($value) => $value !== null && $value !== '');
+    }
+
+    private function normalizeValue(?string $value,string $type):mixed
+    {
+        if($value===null)return null;$value=trim((string)preg_replace('/\s+/u',' ',$value));
+        if(in_array($type,['number','currency','montant'],true)){$number=preg_replace('/[^0-9,.-]/','',$value)??'';$number=str_replace(['.',','],['','.'],$number);return is_numeric($number)?(float)$number:null;}
+        if($type==='boolean')return in_array(mb_strtolower($value),['oui','yes','true','1'],true);
+        if($type==='email')return filter_var($value,FILTER_VALIDATE_EMAIL)?mb_strtolower($value):null;
+        if($type==='phone')return preg_replace('/(?!^\+)[^0-9]/','',$value);
+        if($type==='ncc')return strtoupper((string)preg_replace('/[^A-Z0-9]/i','',$value));
+        if($type==='iban')return strtoupper((string)preg_replace('/\s+/','',$value));
+        if($type==='date'){foreach(['d/m/Y','d-m-Y','Y-m-d','d.m.Y'] as $format){$date=\DateTimeImmutable::createFromFormat($format,$value);if($date&&$date->format($format)===$value)return $date->format('Y-m-d');}}
+        return $value;
     }
 
     private function match(string $text, array $patterns): ?string

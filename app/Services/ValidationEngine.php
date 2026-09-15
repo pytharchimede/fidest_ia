@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace FidestIA\Services;
 
 use FidestIA\Repositories\DocumentRepository;
@@ -39,6 +41,13 @@ final class ValidationEngine
                 $passed = isset($data[$field]) && trim((string) $data[$field]) !== '';
                 $context = ['field' => $field];
             }
+            $params = json_decode((string)($rule['parameters'] ?? '{}'), true) ?: [];
+            $value = $field ? ($data[$field] ?? null) : null;
+            if ($type === 'regex' && $field) {$passed=is_string($value)&&isset($params['pattern'])&&@preg_match((string)$params['pattern'],$value)===1;$context=['field'=>$field];}
+            if ($type === 'min' && $field) {$passed=is_numeric($value)&&(float)$value>=(float)($params['value']??0);$context=['field'=>$field,'minimum'=>$params['value']??0];}
+            if ($type === 'max' && $field) {$passed=is_numeric($value)&&(float)$value<=(float)($params['value']??0);$context=['field'=>$field,'maximum'=>$params['value']??0];}
+            if ($type === 'equals' && $field) {$passed=$value==($params['value']??null);$context=['field'=>$field,'expected'=>$params['value']??null];}
+            if ($type === 'in' && $field) {$passed=in_array($value,(array)($params['values']??[]),true);$context=['field'=>$field];}
 
             $results[] = [
                 'rule_id' => (int) $rule['id'],

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace FidestIA\Services;
 
 final class DocumentClassifierService
@@ -23,8 +25,8 @@ final class DocumentClassifierService
             $keywords = $classification['keywords'] ?? ($schema['keywords'] ?? []);
             $strongKeywords = $classification['strong_keywords'] ?? [];
             $negativeKeywords = $classification['negative_keywords'] ?? [];
-            $requiredAny = $classification['required_any'] ?? [];
-            $minScore = (int) ($classification['min_score'] ?? 2);
+            $requiredAny = $classification['required_any'] ?? ($classification['required_keywords'] ?? []);
+            $minScore = (int) ($classification['minimum_score'] ?? $classification['min_score'] ?? $classification['threshold'] ?? 2);
 
             if ($requiredAny !== [] && !$this->containsAny($haystack, $requiredAny)) {
                 continue;
@@ -69,6 +71,11 @@ final class DocumentClassifierService
                 }
             }
 
+            foreach((array)($classification['patterns']??[]) as $pattern){if(@preg_match((string)$pattern,$text)){ $weight=(int)($classification['pattern_weight']??3);$score+=$weight;$signals[]=['signal'=>(string)$pattern,'points'=>$weight,'kind'=>'regex'];}}
+
+            $footer=mb_substr($haystack,-1200);
+            if(($type['code']??'')==='RIB' && preg_match('/\b(?:facture|total\s+ttc|net\s+a\s+payer)\b/u',$head) && preg_match('/\b(?:iban|bic)\b/u',$footer)){$score-=10;$signals[]=['signal'=>'Coordonnées bancaires uniquement en pied de facture','points'=>-10,'kind'=>'footer_penalty'];}
+
             if ($score < $minScore) {
                 continue;
             }
@@ -85,6 +92,7 @@ final class DocumentClassifierService
         }
 
         $best['classification_score'] = $bestScore;
+        $best['classification_confidence'] = min(1.0,max(0.0,$bestScore/15));
         $best['classification_signals'] = $bestSignals;
         return $best;
     }

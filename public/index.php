@@ -8,7 +8,7 @@
 <style>
 :root{--text:#202124;--muted:#5f6368;--line:#dadce0;--soft:#f8f9fa;--blue:#1a73e8;--blue2:#1967d2;--ok:#137333;--bad:#b3261e}
 *{box-sizing:border-box;min-width:0}html,body{margin:0;max-width:100%;overflow-x:hidden}body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:var(--text)}button,input,select,textarea{font:inherit}
-.topbar{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #f1f3f4}.brand{font-size:20px;font-weight:600;letter-spacing:-.3px}.brand span{color:var(--blue)}.top-actions{display:flex;align-items:center;gap:8px}.link-btn{border:0;background:transparent;color:var(--muted);padding:9px 12px;border-radius:20px;cursor:pointer}.link-btn:hover{background:var(--soft);color:var(--text)}
+.topbar{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #f1f3f4}.brand{font-size:20px;font-weight:600;letter-spacing:-.3px}.brand span{color:var(--blue)}.top-actions{display:flex;align-items:center;gap:8px;overflow:auto}.link-btn{border:0;background:transparent;color:var(--muted);padding:9px 12px;border-radius:20px;cursor:pointer;text-decoration:none;white-space:nowrap}.link-btn:hover{background:var(--soft);color:var(--text)}
 .page{width:min(760px,calc(100% - 32px));margin:0 auto;padding:64px 0 52px}.hero{text-align:center;margin-bottom:34px}.hero h1{font-size:clamp(34px,6vw,54px);font-weight:500;letter-spacing:-1.8px;margin:0 0 14px}.hero p{margin:0 auto;color:var(--muted);font-size:16px;line-height:1.6;max-width:610px}
 .card{border:1px solid var(--line);border-radius:24px;padding:24px;background:#fff}.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:170px;border:1px dashed #c4c7c5;border-radius:18px;background:#fff;cursor:pointer;padding:24px;text-align:center;transition:.15s}.drop:hover{background:var(--soft);border-color:#9aa0a6}.drop-icon{width:48px;height:48px;border-radius:50%;background:#e8f0fe;color:var(--blue);display:grid;place-items:center;font-size:24px;margin-bottom:13px}.drop strong{font-size:16px;font-weight:500;overflow-wrap:anywhere}.drop small{margin-top:7px;color:var(--muted);font-size:13px;line-height:1.45}input[type=file]{display:none}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}.field{display:flex;flex-direction:column;gap:7px}.field label{font-size:12px;color:var(--muted);font-weight:600}.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);outline:none}.field input,.field select{height:46px;padding:0 12px}.field textarea{min-height:88px;padding:12px;resize:vertical}.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
@@ -23,6 +23,10 @@
 <header class="topbar">
   <div class="brand">FIDEST <span>IA</span></div>
   <div class="top-actions">
+    <a class="link-btn" href="admin/documents">Documents</a>
+    <a class="link-btn" href="admin/document-types">Types</a>
+    <a class="link-btn" href="admin/documentation">Documentation API</a>
+    <a class="link-btn" href="admin">Administration</a>
     <button class="link-btn" type="button" id="openTypeModal">Créer un type</button>
   </div>
 </header>

@@ -15,6 +15,10 @@ POST /api/v1/documents/analyze
 GET  /api/v1/document-types
 POST /api/v1/document-types
 GET  /api/v1/health
+GET  /api/v1/documents
+GET  /api/v1/documents/{uuid}
+GET  /api/v1/validation-rules
+POST /api/v1/validation-rules
 ```
 
 Aucune route publique v1 ne contient `.php`.
@@ -50,8 +54,12 @@ Chaque application possède donc sa propre clé. Une clé peut être révoquée 
 
 ```text
 documents:analyze   analyser et contrôler des documents
+documents:read      consulter un document par UUID
+documents:list      rechercher et lister les documents
 types:read          lire le catalogue des types documentaires
 types:write         créer des types documentaires
+rules:read          lire les règles de validation
+rules:write         créer les règles de validation
 ```
 
 Recommandation pour FINEA :
@@ -149,9 +157,10 @@ curl_close($ch);
 $result = json_decode((string) $response, true);
 
 if ($httpCode === 200 && ($result['success'] ?? false)) {
-    $type = $result['document_type']['code'] ?? null;
-    $valid = $result['validation']['valid'] ?? false;
-    $data = $result['data'] ?? [];
+    $analysis = $result['data'] ?? [];
+    $type = $analysis['document_type']['code'] ?? null;
+    $valid = $analysis['validation']['valid'] ?? false;
+    $fields = $analysis['data'] ?? [];
 }
 ```
 
@@ -160,24 +169,22 @@ if ($httpCode === 200 && ($result['success'] ?? false)) {
 ```json
 {
   "success": true,
-  "document_id": 10,
-  "uuid": "4c1a3e69-376c-4941-9898-98d27824237a",
-  "status": "validated",
-  "classification": {
-    "automatic": true,
-    "score": 20,
-    "signals": [],
-    "fallback_to_general": false
+  "data": {
+    "document_id": 10,
+    "uuid": "4c1a3e69-376c-4941-9898-98d27824237a",
+    "status": "validated",
+    "classification": {
+      "automatic": true,
+      "score": 20,
+      "confidence": 1,
+      "signals": [],
+      "fallback_to_general": false
+    },
+    "document_type": {"code": "COMMERCIAL_INVOICE_CI", "name": "Facture commerciale"},
+    "data": {},
+    "validation": {"valid": true, "results": []}
   },
-  "document_type": {
-    "code": "COMMERCIAL_INVOICE_CI",
-    "name": "Facture commerciale / fournisseur"
-  },
-  "data": {},
-  "validation": {
-    "valid": true,
-    "results": []
-  }
+  "meta": {"request_id": "..."}
 }
 ```
 
@@ -217,6 +224,18 @@ Content-Type: application/json
 ```
 
 ## 4. Santé de l'API
+
+`GET /api/v1/health` est public et ne révèle aucune information sensible.
+
+## Rate limiting et erreurs
+
+Chaque application dispose d'une limite par minute (60 par défaut). Les réponses exposent `X-RateLimit-Limit`, `X-RateLimit-Remaining` et, en cas de HTTP 429, `Retry-After`.
+
+```json
+{"success":false,"error":{"code":"INSUFFICIENT_SCOPE","message":"Scope requis : documents:read"},"meta":{"request_id":"..."}}
+```
+
+Codes usuels : 401 clé absente/invalide/expirée/révoquée, 403 scope insuffisant, 404 ressource absente, 422 entrée invalide, 429 limite atteinte, 500 erreur interne. Aucune trace d'exécution n'est retournée en production.
 
 ```http
 GET /api/v1/health
