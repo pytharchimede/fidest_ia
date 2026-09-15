@@ -60,7 +60,25 @@ Ces types servent au typage et à l’extraction. Ils ne constituent pas une cer
 
 ## API
 
-`POST /api/documents/analyze.php`
+Documentation complète :
+
+- [`docs/API.md`](docs/API.md) : référence de l'API v1 ;
+- [`docs/INTEGRATION_FINEA.md`](docs/INTEGRATION_FINEA.md) : intégration prête à l'emploi pour FINEA ;
+- [`docs/INTEGRATION_APPLICATIONS.md`](docs/INTEGRATION_APPLICATIONS.md) : intégration de toute autre application.
+
+URL de production :
+
+```text
+https://ia.fidest.ci/api/v1
+```
+
+Endpoint principal :
+
+```http
+POST /api/v1/documents/analyze
+Authorization: Bearer fia_live_...
+Content-Type: multipart/form-data
+```
 
 Multipart fields :
 
@@ -69,6 +87,10 @@ Multipart fields :
 - `client_reference` : optionnel
 
 La réponse JSON contient le type détecté, le texte OCR, les champs extraits, le statut et le détail des contrôles.
+
+Chaque application cliente doit disposer de sa propre clé, créée dans
+`https://ia.fidest.ci/admin/applications`. Ne jamais utiliser le jeton
+administrateur comme clé API.
 
 ## Règles initiales
 
