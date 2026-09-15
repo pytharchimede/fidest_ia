@@ -6,15 +6,19 @@
     "php": ">=8.2",
     "ext-pdo": "*",
     "ext-fileinfo": "*",
-    "thiagoalessio/tesseract_ocr": "^2.13"
+    "thiagoalessio/tesseract_ocr": "^2.13",
+    "wamania/php-stemmer": "^4.0"
   },
   "autoload": {
     "psr-4": {
-      "FidestIA\\": "app/"
+      "FidestIA\\": ["app/", "src/"]
     }
   },
   "config": {
     "optimize-autoloader": true,
     "sort-packages": true
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.5.50"
   }
 }
