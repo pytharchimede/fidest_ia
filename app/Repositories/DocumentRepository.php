@@ -62,6 +62,12 @@ final class DocumentRepository
         $stmt->execute([$text, json_encode($extractedData, JSON_UNESCAPED_UNICODE), $status, $confidence, $id]);
     }
 
+    public function updateIntelligence(int $id,string $normalizedText,array $anomalies,array $scores):void
+    {
+        $stmt=$this->db->prepare('UPDATE documents SET normalized_text=?,anomalies=?,confidence_scores=? WHERE id=?');$stmt->execute([$normalizedText,json_encode($anomalies,JSON_UNESCAPED_UNICODE),json_encode($scores,JSON_UNESCAPED_UNICODE),$id]);
+        $stmt=$this->db->prepare('INSERT INTO document_history (document_id,event_type,new_status,details) VALUES (?,\'analysis_completed\',(SELECT status FROM documents WHERE id=?),?)');$stmt->execute([$id,$id,json_encode(['scores'=>$scores,'anomaly_count'=>count($anomalies)],JSON_UNESCAPED_UNICODE)]);
+    }
+
     public function existsByField(int $documentTypeId, string $field, mixed $value, array $scope = []): bool
     {
         if ($value === null || $value === '') {
@@ -124,5 +130,11 @@ final class DocumentRepository
     public function stats():array
     {
         $sql="SELECT COUNT(*) total,SUM(DATE(created_at)=CURDATE()) today,SUM(status='validated') validated,SUM(status='rejected') rejected,SUM(status='error') errors FROM documents";return $this->db->query($sql)->fetch()?:[];
+    }
+
+    public function correctField(string $uuid,string $field,mixed $correctedValue,string $correctedBy='admin'):bool
+    {
+        if(!preg_match('/^[a-z][a-z0-9_]{0,119}$/i',$field))return false;$document=$this->findByUuid($uuid);if(!$document)return false;$data=json_decode((string)($document['extracted_data']??'{}'),true)?:[];$detected=$data[$field]??null;$data[$field]=$correctedValue;
+        $this->db->beginTransaction();try{$stmt=$this->db->prepare('UPDATE documents SET extracted_data=? WHERE id=?');$stmt->execute([json_encode($data,JSON_UNESCAPED_UNICODE),(int)$document['id']]);$stmt=$this->db->prepare('INSERT INTO document_field_corrections (document_id,field_name,detected_value,corrected_value,corrected_by) VALUES (?,?,?,?,?)');$stmt->execute([(int)$document['id'],$field,is_scalar($detected)?(string)$detected:json_encode($detected,JSON_UNESCAPED_UNICODE),(string)$correctedValue,$correctedBy]);$this->db->commit();return true;}catch(\Throwable $e){$this->db->rollBack();throw $e;}
     }
 }

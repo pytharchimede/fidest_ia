@@ -9,7 +9,7 @@ use FidestIA\Services\DocumentAnalysisService;
 use FidestIA\Services\DocumentClassifierService;
 use FidestIA\Services\DocumentExtractionService;
 use FidestIA\Services\DocumentStorageService;
-use FidestIA\Services\Ocr\TesseractOcrService;
+use FidestIA\Services\Ocr\OcrEngineFactory;
 use FidestIA\Services\ValidationEngine;
 
 header('Content-Type: application/json; charset=utf-8');
@@ -29,7 +29,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $root = dirname(__DIR__, 3);
-$config = require $root . '/bootstrap.php';
+try {
+    $config = require $root . '/bootstrap.php';
+} catch (Throwable) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'Service documentaire temporairement indisponible.'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 try {
     if (!isset($_FILES['document'])) {
@@ -54,10 +60,7 @@ try {
 
     $service = new DocumentAnalysisService(
         new DocumentStorageService($storagePath),
-        new TesseractOcrService(
-            $config['ocr']['binary'] ?? 'tesseract',
-            $config['ocr']['languages'] ?? 'fra+eng'
-        ),
+        (new OcrEngineFactory($config, $root))->create(),
         new DocumentExtractionService(),
         new DocumentClassifierService(),
         new ValidationEngine($documents),
