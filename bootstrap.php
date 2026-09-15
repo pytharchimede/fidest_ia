@@ -9,6 +9,25 @@ use FidestIA\Core\MigrationRunner;
 
 require __DIR__ . '/vendor/autoload.php';
 
+// Transitional fallback while the historically tracked vendor/ directory is
+// being removed. Application classes must not depend on a stale generated
+// Composer classmap; third-party libraries still use Composer normally.
+spl_autoload_register(static function (string $class): void {
+    $prefix = 'FidestIA\\';
+    if (!str_starts_with($class, $prefix)) {
+        return;
+    }
+
+    $relative = str_replace('\\', DIRECTORY_SEPARATOR, substr($class, strlen($prefix))) . '.php';
+    foreach ([__DIR__ . '/app/', __DIR__ . '/src/'] as $directory) {
+        $file = $directory . $relative;
+        if (is_file($file)) {
+            require_once $file;
+            return;
+        }
+    }
+}, true, true);
+
 Env::load(__DIR__ . '/.env');
 
 $documentsPath = (string) Env::get('DOCUMENTS_PATH', 'storage/documents');
