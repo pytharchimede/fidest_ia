@@ -1,6 +1,26 @@
+# Configuration locale / secrets
 .env
 .env.*
 !.env.example
+
+# Dépendances Composer
+/vendor/
+
+# Documents et données générés à l'exécution
 /storage/documents/*
 !/storage/documents/.gitkeep
-/vendor/
+
+# Uploads utilisateurs
+/public/uploads/images/*
+!/public/uploads/images/.gitkeep
+/public/uploads/tmp/*
+!/public/uploads/tmp/.gitkeep
+
+# Logs PHP / Apache applicatifs
+error_log
+**/error_log
+*.log
+
+# PHPUnit
+.phpunit.result.cache
+.phpunit.cache/
