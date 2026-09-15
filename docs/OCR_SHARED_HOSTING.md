@@ -43,13 +43,15 @@ PDF_CONVERTER=auto
 PDF_POPPLER_BINARY=pdftoppm
 PDF_GS_BINARY=/bin/gs
 PDF_IMAGEMAGICK_BINARY=/bin/convert
-PDF_DPI=250
+PDF_DPI=150
 PDF_MAX_PAGES=20
 
 AI_ENABLED=false
 ```
 
 `auto` essaie le binaire utilisateur, puis Tesseract système. Sans moteur réel, l'API retourne une erreur JSON contrôlée ; elle ne simule jamais l'OCR.
+
+La valeur 150 DPI est le réglage mutualisé validé sur un document réel : elle conserve les champs utiles tout en réduisant fortement le temps de traitement. Augmenter à 200–250 uniquement pour des scans difficiles et avec un timeout adapté.
 
 ## Dépendances
 

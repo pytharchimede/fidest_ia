@@ -54,7 +54,7 @@ $config = [
         'poppler_binary' => (string) Env::get('PDF_POPPLER_BINARY', 'pdftoppm'),
         'gs_binary' => (string) Env::get('PDF_GS_BINARY', '/bin/gs'),
         'imagemagick_binary' => (string) Env::get('PDF_IMAGEMAGICK_BINARY', '/bin/convert'),
-        'dpi' => (int) Env::get('PDF_DPI', 250),
+        'dpi' => (int) Env::get('PDF_DPI', 150),
         'max_pages' => (int) Env::get('PDF_MAX_PAGES', 20),
     ],
     'storage' => [
