@@ -5,7 +5,7 @@ FIDEST IA expose une API HTTP versionnée permettant à FINEA, IFMAP, LBP ou tou
 ## URL de base
 
 ```text
-https://votre-domaine/api/v1
+https://ia.fidest.ci/api/v1
 ```
 
 Exemples de routes :
@@ -32,7 +32,7 @@ Les clés API ne doivent pas être créées manuellement dans le code des applic
 Depuis FIDEST IA :
 
 ```text
-/admin
+https://ia.fidest.ci/admin/applications
 ```
 
 1. se connecter à l'administration ;
@@ -64,10 +64,12 @@ rules:read          lire les règles de validation
 rules:write         créer les règles de validation
 ```
 
-Recommandation pour FINEA :
+Recommandation pour FINEA et les applications qui soumettent puis consultent
+leurs documents :
 
 ```text
 documents:analyze
+documents:read
 types:read
 ```
 
@@ -85,8 +87,7 @@ Accept: application/json
 Exemple :
 
 ```bash
-curl 'https://votre-domaine/api/v1/health' \
-  -H 'Authorization: Bearer fia_live_...'
+curl 'https://ia.fidest.ci/api/v1/health'
 ```
 
 ## 1. Analyser et contrôler un document
@@ -110,7 +111,7 @@ Content-Type: multipart/form-data
 ### Exemple cURL
 
 ```bash
-curl -X POST 'https://votre-domaine/api/v1/documents/analyze' \
+curl --fail-with-body -X POST 'https://ia.fidest.ci/api/v1/documents/analyze' \
   -H 'Authorization: Bearer fia_live_...' \
   -H 'Accept: application/json' \
   -F 'document=@/chemin/facture.pdf' \
@@ -123,7 +124,7 @@ curl -X POST 'https://votre-domaine/api/v1/documents/analyze' \
 Stocker dans le `.env` de FINEA :
 
 ```dotenv
-FIDEST_IA_URL=https://votre-domaine
+FIDEST_IA_URL=https://ia.fidest.ci
 FIDEST_IA_API_TOKEN=fia_live_...
 ```
 
@@ -149,20 +150,30 @@ curl_setopt_array($ch, [
         'client_reference' => 'FEB-2026-00125',
     ],
     CURLOPT_CONNECTTIMEOUT => 10,
-    CURLOPT_TIMEOUT => 120,
+    CURLOPT_TIMEOUT => 180,
 ]);
 
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlError = curl_error($ch);
 curl_close($ch);
 
-$result = json_decode((string) $response, true);
+if ($response === false) {
+    throw new RuntimeException('FIDEST IA inaccessible : ' . $curlError);
+}
+
+$result = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
 
 if ($httpCode === 200 && ($result['success'] ?? false)) {
     $analysis = $result['data'] ?? [];
     $type = $analysis['document_type']['code'] ?? null;
     $valid = $analysis['validation']['valid'] ?? false;
     $fields = $analysis['data'] ?? [];
+} else {
+    $requestId = $result['meta']['request_id'] ?? 'inconnu';
+    $errorCode = $result['error']['code'] ?? 'UNKNOWN_ERROR';
+    $message = $result['error']['message'] ?? 'Erreur FIDEST IA';
+    throw new RuntimeException("$errorCode: $message (requête $requestId)");
 }
 ```
 
@@ -183,8 +194,13 @@ if ($httpCode === 200 && ($result['success'] ?? false)) {
       "fallback_to_general": false
     },
     "document_type": {"code": "COMMERCIAL_INVOICE_CI", "name": "Facture commerciale"},
-    "data": {},
-    "validation": {"valid": true, "results": []}
+    "file": {"original_name": "facture.pdf", "mime_type": "application/pdf", "size": 146488, "sha256": "..."},
+    "ocr": {"engine": "tesseract", "confidence": 0.91, "text": "..."},
+    "fields": {"invoice_number": {"value": "21185", "confidence": 0.95, "source": "pattern"}},
+    "data": {"invoice_number": "21185", "total": "10000.00"},
+    "validation": {"valid": true, "results": []},
+    "anomalies": [],
+    "scores": {"overall": 0.91}
   },
   "meta": {"request_id": "..."}
 }
@@ -205,7 +221,7 @@ Authorization: Bearer <clé avec types:read>
 ```
 
 ```bash
-curl 'https://votre-domaine/api/v1/document-types' \
+curl 'https://ia.fidest.ci/api/v1/document-types' \
   -H 'Authorization: Bearer fia_live_...'
 ```
 
@@ -229,7 +245,8 @@ Content-Type: application/json
 
 ## 4. Santé de l'API
 
-`GET /api/v1/health` est public et ne révèle aucune information sensible.
+`GET /api/v1/health` est public et ne révèle aucune information sensible. Il
+ne faut donc pas envoyer de clé pour ce contrôle de disponibilité.
 
 ## Rate limiting et erreurs
 
@@ -240,13 +257,6 @@ Chaque application dispose d'une limite par minute (60 par défaut). Les répons
 ```
 
 Codes usuels : 401 clé absente/invalide/expirée/révoquée, 403 scope insuffisant, 404 ressource absente, 422 entrée invalide, 429 limite atteinte, 500 erreur interne. Aucune trace d'exécution n'est retournée en production.
-
-```http
-GET /api/v1/health
-Authorization: Bearer <clé valide>
-```
-
-La réponse indique également l'application reconnue et ses scopes.
 
 ## Gestion des clés dans FIDEST IA
 
@@ -281,3 +291,15 @@ La clé complète n'est jamais réaffichée après sa création.
 - révoquer immédiatement une clé compromise ;
 - n'accorder que les scopes nécessaires ;
 - créer des clés distinctes pour développement, staging et production.
+
+## Exploitation et diagnostic
+
+Conserver `meta.request_id` dans les journaux de l'application appelante. Cet
+identifiant permet de retrouver l'appel correspondant dans **Admin > Logs /
+Audit** sans journaliser la clé API ni le contenu intégral du document.
+
+Un délai d'attente client de 180 secondes est recommandé pour l'analyse d'un
+PDF. Une erreur HTTP peut néanmoins contenir un JSON utile : toujours décoder
+le corps avant de décider d'une nouvelle tentative. Réessayer avec temporisation
+progressive uniquement pour `429` et les erreurs `5xx`, jamais automatiquement
+pour `401`, `403` ou `422`.
