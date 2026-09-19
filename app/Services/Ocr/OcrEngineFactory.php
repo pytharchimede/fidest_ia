@@ -4,21 +4,57 @@ namespace FidestIA\Services\Ocr;
 use FidestIA\Contracts\OcrEngineInterface;
 use FidestIA\Core\ProcessRunner;
 use RuntimeException;
+
 final class OcrEngineFactory
 {
     public function __construct(private readonly array $config,private readonly string $rootPath){}
     public function create():OcrEngineInterface
     {
-        $driver=strtolower((string)($this->config['ocr']['driver']??'auto'));if(!in_array($driver,['auto','tesseract','embedded'],true))throw new RuntimeException('OCR_DRIVER invalide. Les moteurs php fictifs ne sont pas acceptés.');
-        $binary=(string)($this->config['ocr']['binary']??'tesseract');$embedded=(string)($this->config['ocr']['embedded_binary']??$this->rootPath.'/tools/tesseract/tesseract.AppImage');
+        $driver=strtolower((string)($this->config['ocr']['driver']??'auto'));
+        if(!in_array($driver,['auto','tesseract','embedded'],true)) throw new RuntimeException('OCR_DRIVER invalide.');
+        $binary=(string)($this->config['ocr']['binary']??'tesseract');
+        $embedded=(string)($this->config['ocr']['embedded_binary']??$this->rootPath.'/tools/tesseract/squashfs-root/AppRun');
         $candidates=$driver==='embedded'?[$embedded]:($driver==='tesseract'?[$binary]:[$embedded,$binary]);
         foreach(array_unique($candidates) as $candidate){$engine=$this->build($candidate);if($engine->available())return $engine;}
-        throw new RuntimeException('Aucun vrai moteur OCR disponible. Installez Tesseract ou configurez OCR_EMBEDDED_BINARY vers un AppImage exécutable.');
+        throw new RuntimeException('Aucun vrai moteur OCR disponible. Installez Tesseract ou configurez OCR_EMBEDDED_BINARY vers un exécutable valide.');
     }
+
     public function diagnostics():array
     {
-        $embedded=(string)($this->config['ocr']['embedded_binary']??$this->rootPath.'/tools/tesseract/tesseract.AppImage');$system=(string)($this->config['ocr']['binary']??'tesseract');$e=$this->build($embedded);$s=$this->build($system);$active=null;try{$active=$this->create() instanceof TesseractOcrService?'tesseract':null;}catch(\Throwable){}return ['embedded'=>$e->available(),'tesseract'=>$s->available(),'active'=>$active,'pdf_converter'=>$this->converter()->activeConverter()];
+        $embedded=(string)($this->config['ocr']['embedded_binary']??$this->rootPath.'/tools/tesseract/squashfs-root/AppRun');
+        $system=(string)($this->config['ocr']['binary']??'tesseract');
+        $e=$this->build($embedded);$s=$this->build($system);$active=null;
+        try{$active=$this->create() instanceof TesseractOcrService?'tesseract':null;}catch(\Throwable){}
+        return ['embedded'=>$e->available(),'tesseract'=>$s->available(),'active'=>$active,'pdf_converter'=>$this->converter()->activeConverter()];
     }
-    private function build(string $binary):TesseractOcrService{return new TesseractOcrService($binary,(string)($this->config['ocr']['languages']??'fra+eng'),$this->converter(),new ImagePreprocessor(),new ProcessRunner((int)($this->config['ocr']['timeout']??120)));}
-    private function converter():PdfToImageConverter{return new PdfToImageConverter(new ProcessRunner((int)($this->config['ocr']['timeout']??120)),(string)($this->config['pdf']['converter']??'auto'),(string)($this->config['pdf']['poppler_binary']??'pdftoppm'),(string)($this->config['pdf']['gs_binary']??'/bin/gs'),(string)($this->config['pdf']['imagemagick_binary']??'/bin/convert'),(int)($this->config['pdf']['dpi']??250),(int)($this->config['pdf']['max_pages']??20));}
+
+    private function build(string $binary):TesseractOcrService
+    {
+        $shared=(bool)($this->config['ocr']['shared_hosting_mode']??false);
+        $preprocessor=new ImagePreprocessor(
+            (bool)($this->config['ocr']['optimize_documents']??true),
+            (int)($this->config['ocr']['max_image_width']??1400),
+            $shared
+        );
+        return new TesseractOcrService(
+            $binary,(string)($this->config['ocr']['languages']??'fra+eng'),
+            $this->converter(),$preprocessor,
+            new ProcessRunner((int)($this->config['ocr']['timeout']??120)),
+            (int)($this->config['ocr']['omp_thread_limit']??1)
+        );
+    }
+
+    private function converter():PdfToImageConverter
+    {
+        $shared=(bool)($this->config['ocr']['shared_hosting_mode']??false);
+        $dpi=$shared?(int)($this->config['pdf']['shared_hosting_dpi']??100):(int)($this->config['pdf']['dpi']??150);
+        return new PdfToImageConverter(
+            new ProcessRunner((int)($this->config['ocr']['timeout']??120)),
+            (string)($this->config['pdf']['converter']??'auto'),
+            (string)($this->config['pdf']['poppler_binary']??'pdftoppm'),
+            (string)($this->config['pdf']['gs_binary']??'/bin/gs'),
+            (string)($this->config['pdf']['imagemagick_binary']??'/bin/convert'),
+            max(72,$dpi),(int)($this->config['pdf']['max_pages']??20)
+        );
+    }
 }
