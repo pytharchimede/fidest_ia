@@ -9,31 +9,20 @@ use FidestIA\Core\MigrationRunner;
 
 require __DIR__ . '/vendor/autoload.php';
 
-// Transitional fallback while the historically tracked vendor/ directory is
-// being removed. Application classes must not depend on a stale generated
-// Composer classmap; third-party libraries still use Composer normally.
 spl_autoload_register(static function (string $class): void {
     $prefix = 'FidestIA\\';
-    if (!str_starts_with($class, $prefix)) {
-        return;
-    }
-
+    if (!str_starts_with($class, $prefix)) return;
     $relative = str_replace('\\', DIRECTORY_SEPARATOR, substr($class, strlen($prefix))) . '.php';
     foreach ([__DIR__ . '/app/', __DIR__ . '/src/'] as $directory) {
         $file = $directory . $relative;
-        if (is_file($file)) {
-            require_once $file;
-            return;
-        }
+        if (is_file($file)) { require_once $file; return; }
     }
 }, true, true);
 
 Env::load(__DIR__ . '/.env');
 
 $documentsPath = (string) Env::get('DOCUMENTS_PATH', 'storage/documents');
-if (!str_starts_with($documentsPath, '/')) {
-    $documentsPath = __DIR__ . '/' . ltrim($documentsPath, '/');
-}
+if (!str_starts_with($documentsPath, '/')) $documentsPath = __DIR__ . '/' . ltrim($documentsPath, '/');
 
 $config = [
     'app' => [
@@ -44,9 +33,7 @@ $config = [
         'auto_migrate' => Env::bool('AUTO_MIGRATE', true),
         'auto_bootstrap' => Env::bool('AUTO_BOOTSTRAP', true),
     ],
-    'admin' => [
-        'token' => (string) Env::get('ADMIN_TOKEN', ''),
-    ],
+    'admin' => ['token' => (string) Env::get('ADMIN_TOKEN', '')],
     'api' => [
         'enabled' => Env::bool('API_ENABLED', true),
         'bearer_token' => (string) Env::get('API_BEARER_TOKEN', ''),
@@ -64,9 +51,13 @@ $config = [
     'ocr' => [
         'driver' => (string) Env::get('OCR_DRIVER', 'auto'),
         'binary' => (string) Env::get('OCR_BINARY', 'tesseract'),
-        'embedded_binary' => (string) Env::get('OCR_EMBEDDED_BINARY', __DIR__ . '/tools/tesseract/tesseract.AppImage'),
+        'embedded_binary' => (string) Env::get('OCR_EMBEDDED_BINARY', __DIR__ . '/tools/tesseract/squashfs-root/AppRun'),
         'languages' => (string) Env::get('OCR_LANGUAGES', 'fra+eng'),
         'timeout' => (int) Env::get('OCR_TIMEOUT_SECONDS', 120),
+        'shared_hosting_mode' => Env::bool('OCR_SHARED_HOSTING_MODE', false),
+        'optimize_documents' => Env::bool('OCR_OPTIMIZE_DOCUMENTS', true),
+        'max_image_width' => (int) Env::get('OCR_MAX_IMAGE_WIDTH', 1400),
+        'omp_thread_limit' => max(1, (int) Env::get('OCR_OMP_THREAD_LIMIT', 1)),
     ],
     'pdf' => [
         'converter' => (string) Env::get('PDF_CONVERTER', 'auto'),
@@ -74,6 +65,7 @@ $config = [
         'gs_binary' => (string) Env::get('PDF_GS_BINARY', '/bin/gs'),
         'imagemagick_binary' => (string) Env::get('PDF_IMAGEMAGICK_BINARY', '/bin/convert'),
         'dpi' => (int) Env::get('PDF_DPI', 150),
+        'shared_hosting_dpi' => (int) Env::get('PDF_SHARED_HOSTING_DPI', 100),
         'max_pages' => (int) Env::get('PDF_MAX_PAGES', 20),
     ],
     'storage' => [
@@ -82,13 +74,9 @@ $config = [
     ],
 ];
 
-if ($config['app']['auto_bootstrap']) {
-    $config['deployment'] = (new DeploymentBootstrap(__DIR__))->run($config);
-}
-
+if ($config['app']['auto_bootstrap']) $config['deployment'] = (new DeploymentBootstrap(__DIR__))->run($config);
 if ($config['app']['auto_migrate'] && $config['database']['name'] !== '') {
     $db = Database::connection($config);
     $config['migrations_applied'] = (new MigrationRunner($db, __DIR__ . '/database/migrations'))->run();
 }
-
 return $config;
