@@ -162,8 +162,23 @@ form.addEventListener('submit',async e=>{
   status.textContent='Analyse';
   status.className='status';
   try{
-    const r=await fetch('api/documents/analyze.php',{method:'POST',body:new FormData(form)});
-    const data=await r.json();
+    const r=await fetch('api/documents/analyze.php',{method:'POST',headers:{'Accept':'application/json'},body:new FormData(form)});
+    const raw=await r.text();
+    let data;
+    try{
+      data=JSON.parse(raw);
+    }catch(parseError){
+      const contentType=r.headers.get('content-type')||'';
+      throw new Error(
+        'Le serveur a renvoyé une réponse invalide'+
+        (r.status?' (HTTP '+r.status+')':'')+
+        (contentType?' ['+contentType+']':'')+
+        '. Vérifiez les journaux PHP/OCR du serveur.'
+      );
+    }
+    if(!r.ok&&data.success!==false){
+      data={success:false,error:data.error||('Erreur HTTP '+r.status)};
+    }
     lastResult=data;
     json.textContent=JSON.stringify(data,null,2);
     const ok=data.success&&data.status==='validated';
