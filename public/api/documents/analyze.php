@@ -12,7 +12,40 @@ use FidestIA\Services\DocumentStorageService;
 use FidestIA\Services\Ocr\OcrEngineFactory;
 use FidestIA\Services\ValidationEngine;
 
+ob_start();
 header('Content-Type: application/json; charset=utf-8');
+ini_set('display_errors', '0');
+
+function jsonResponse(array $payload, int $status = 200): never
+{
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    exit;
+}
+
+register_shutdown_function(static function (): void {
+    $error = error_get_last();
+    if ($error === null || !in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
+        return;
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode([
+        'success' => false,
+        'error' => 'Une erreur serveur a interrompu l’analyse du document.',
+        'error_code' => 'DOCUMENT_ANALYSIS_FATAL_ERROR',
+    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+});
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
@@ -23,18 +56,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Méthode non autorisée.']);
-    exit;
+    jsonResponse(['success' => false, 'error' => 'Méthode non autorisée.'], 405);
 }
 
 $root = dirname(__DIR__, 3);
 try {
     $config = require $root . '/bootstrap.php';
 } catch (Throwable) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Service documentaire temporairement indisponible.'], JSON_UNESCAPED_UNICODE);
-    exit;
+    jsonResponse(['success' => false, 'error' => 'Service documentaire temporairement indisponible.'], 500);
 }
 
 try {
@@ -74,11 +103,11 @@ try {
         isset($_POST['client_reference']) ? trim((string) $_POST['client_reference']) : null
     );
 
-    echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    jsonResponse($result);
 } catch (Throwable $e) {
-    http_response_code(422);
-    echo json_encode([
+    jsonResponse([
         'success' => false,
         'error' => $e->getMessage(),
-    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        'error_code' => 'DOCUMENT_ANALYSIS_FAILED',
+    ], 422);
 }
