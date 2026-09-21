@@ -58,6 +58,8 @@ $config = [
         'optimize_documents' => Env::bool('OCR_OPTIMIZE_DOCUMENTS', true),
         'max_image_width' => (int) Env::get('OCR_MAX_IMAGE_WIDTH', 1400),
         'omp_thread_limit' => max(1, (int) Env::get('OCR_OMP_THREAD_LIMIT', 1)),
+        'lock_file' => (string) Env::get('OCR_LOCK_FILE', __DIR__ . '/storage/locks/ocr.lock'),
+        'lock_wait_seconds' => max(0, (int) Env::get('OCR_LOCK_WAIT_SECONDS', 2)),
     ],
     'pdf' => [
         'converter' => (string) Env::get('PDF_CONVERTER', 'auto'),
