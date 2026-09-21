@@ -309,3 +309,10 @@ pour `401`, `403` ou `422`.
 ## État d'occupation OCR
 
 `GET /api/v1/ocr/status` permet aux applications clientes de savoir si le moteur est `available`, `busy` ou `unavailable`. En mode mutualisé, un seul document est analysé à la fois. Un POST concurrent reçoit HTTP `409` avec le code `OCR_BUSY`. Les clients doivent alors patienter et interroger le statut, plutôt que multiplier les traitements lourds.
+
+
+### Pause protectrice des ressources serveur
+
+En plus de l'état `busy`, le statut OCR peut retourner `paused` lorsque la charge CPU ou mémoire du serveur dépasse les seuils configurés. Dans cet état, aucun nouveau traitement lourd n'est démarré.
+
+Un POST reçu pendant cette protection retourne HTTP `409` avec `error.code=OCR_RESOURCE_BUSY`, ainsi qu'un en-tête `Retry-After`. Le client doit attendre puis réinterroger `GET /api/v1/ocr/status` sans réuploader le fichier tant que l'état n'est pas `available`.

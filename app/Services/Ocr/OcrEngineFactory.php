@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace FidestIA\Services\Ocr;
 use FidestIA\Contracts\OcrEngineInterface;
-use FidestIA\Core\ProcessRunner;
+use FidestIA\Core\{ProcessRunner,ServerResourceGuard};
 use RuntimeException;
 
 final class OcrEngineFactory
@@ -25,7 +25,7 @@ final class OcrEngineFactory
         $system=(string)($this->config['ocr']['binary']??'tesseract');
         $e=$this->build($embedded);$s=$this->build($system);$active=null;
         try{$active=$this->create() instanceof TesseractOcrService?'tesseract':null;}catch(\Throwable){}
-        return ['embedded'=>$e->available(),'tesseract'=>$s->available(),'active'=>$active,'pdf_converter'=>$this->converter()->activeConverter()];
+        return ['embedded'=>$e->available(),'tesseract'=>$s->available(),'active'=>$active,'pdf_converter'=>$this->converter()->activeConverter(),'resources'=>$this->resourceGuard()->status()];
     }
 
     private function build(string $binary):TesseractOcrService
@@ -42,7 +42,19 @@ final class OcrEngineFactory
             new ProcessRunner((int)($this->config['ocr']['timeout']??120)),
             (int)($this->config['ocr']['omp_thread_limit']??1),
             $shared ? (string)($this->config['ocr']['lock_file']??$this->rootPath.'/storage/locks/ocr.lock') : null,
-            (int)($this->config['ocr']['lock_wait_seconds']??2)
+            (int)($this->config['ocr']['lock_wait_seconds']??2),
+            $this->resourceGuard()
+        );
+    }
+
+    private function resourceGuard():ServerResourceGuard
+    {
+        $cfg=$this->config['resources']??[];
+        return new ServerResourceGuard(
+            (bool)($cfg['guard_enabled']??true),
+            (float)($cfg['max_load_per_cpu']??1.20),
+            (int)($cfg['max_memory_percent']??85),
+            (int)($cfg['retry_after_seconds']??15)
         );
     }
 

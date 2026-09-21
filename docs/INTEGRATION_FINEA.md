@@ -135,3 +135,10 @@ résultat              polling /status 3 s
 ```
 
 Le polling de statut est léger : il ne lance ni Ghostscript ni OCR de document. Un seul traitement lourd est autorisé à la fois sur l'hébergement mutualisé.
+
+
+### Cas `paused` : serveur momentanément chargé
+
+Si `GET /api/v1/ocr/status` retourne `status=paused`, FINEA doit conserver le formulaire et le fichier, afficher un message du type « IA temporairement en pause pour protéger le serveur », puis attendre la valeur `retry_after` avant de refaire uniquement le contrôle de statut.
+
+Si un POST reçoit HTTP `409` avec `error.code=OCR_RESOURCE_BUSY`, appliquer exactement le même comportement. Ne pas relancer plusieurs analyses en parallèle et ne pas réuploader automatiquement le document pendant la pause.

@@ -80,3 +80,21 @@ PDF_SHARED_HOSTING_DPI=75
 ```
 
 Le verrou global limite l'instance à un seul traitement OCR lourd. Les applications clientes utilisent `GET /api/v1/ocr/status` pour afficher l'état disponible/occupé et attendre avant l'envoi. Cette stratégie évite l'empilement de processus Tesseract/Ghostscript qui peut dégrader les autres applications du même compte mutualisé.
+
+
+## Garde-fou global CPU / mémoire
+
+Le verrou mono-OCR évite la concurrence, mais il ne suffit pas si le serveur est déjà chargé par Apache, PHP, MariaDB ou une autre application. FIDEST IA peut donc suspendre préventivement le démarrage des traitements lourds.
+
+Configuration recommandée :
+
+```dotenv
+SERVER_RESOURCE_GUARD=true
+SERVER_MAX_LOAD_PER_CPU=1.20
+SERVER_MAX_MEMORY_PERCENT=85
+SERVER_RESOURCE_RETRY_AFTER=15
+```
+
+Le contrôle est effectué avant la conversion PDF, avant chaque page OCR et pendant l'attente du verrou. Lorsque le seuil est dépassé, `GET /api/v1/ocr/status` retourne `status=paused`, et les nouveaux POST OCR/analyse reçoivent HTTP `409` avec `error.code=OCR_RESOURCE_BUSY`.
+
+Les métriques utilisées sont `sys_getloadavg()`, `/proc/cpuinfo` et `/proc/meminfo` lorsqu'elles sont accessibles. Sur un hébergement mutualisé qui masque certaines de ces informations, les métriques indisponibles sont ignorées et les protections existantes (verrou, timeout, DPI réduit, thread limit) restent actives.
