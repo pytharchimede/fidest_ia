@@ -65,3 +65,18 @@ La valeur 150 DPI est le réglage mutualisé validé sur un document réel : ell
 | Ghostscript/Poppler/ImageMagick | Un des trois pour PDF | Rasterisation PDF |
 | cron | Non | Réservé aux futurs traitements différés |
 | mod_rewrite | Oui | URLs API sans `.php` |
+
+
+## Protection de charge en production
+
+En mode mutualisé, configurer :
+
+```dotenv
+OCR_SHARED_HOSTING_MODE=true
+OCR_OMP_THREAD_LIMIT=1
+OCR_LOCK_FILE=/home/fidestci/ia.fidest.ci/storage/locks/ocr.lock
+OCR_LOCK_WAIT_SECONDS=2
+PDF_SHARED_HOSTING_DPI=75
+```
+
+Le verrou global limite l'instance à un seul traitement OCR lourd. Les applications clientes utilisent `GET /api/v1/ocr/status` pour afficher l'état disponible/occupé et attendre avant l'envoi. Cette stratégie évite l'empilement de processus Tesseract/Ghostscript qui peut dégrader les autres applications du même compte mutualisé.
