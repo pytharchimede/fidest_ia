@@ -65,6 +65,22 @@ final class TesseractOcrService implements OcrEngineInterface
     }
     public function engineName():string{return 'tesseract';}
 
+    public function availabilityStatus():array
+    {
+        if(!$this->available()) return ['status'=>'unavailable','available'=>false,'busy'=>false,'message'=>'Le moteur OCR est indisponible.'];
+        if(!$this->lockFile) return ['status'=>'available','available'=>true,'busy'=>false,'message'=>'FIDEST IA est disponible.'];
+        $dir=dirname($this->lockFile);
+        if(!is_dir($dir) && !@mkdir($dir,0700,true) && !is_dir($dir)) return ['status'=>'unavailable','available'=>false,'busy'=>false,'message'=>'Le verrou OCR est indisponible.'];
+        $handle=@fopen($this->lockFile,'c');
+        if(!is_resource($handle)) return ['status'=>'unavailable','available'=>false,'busy'=>false,'message'=>'Le verrou OCR est indisponible.'];
+        $free=@flock($handle,LOCK_EX|LOCK_NB);
+        if($free) @flock($handle,LOCK_UN);
+        @fclose($handle);
+        return $free
+            ? ['status'=>'available','available'=>true,'busy'=>false,'message'=>'FIDEST IA est disponible.']
+            : ['status'=>'busy','available'=>false,'busy'=>true,'message'=>'Je suis occupée en ce moment. Merci de patienter.'];
+    }
+
     private function ocrImage(string $path):string
     {
         $env=['OMP_THREAD_LIMIT'=>(string)max(1,$this->ompThreadLimit),'OMP_NUM_THREADS'=>(string)max(1,$this->ompThreadLimit)];
