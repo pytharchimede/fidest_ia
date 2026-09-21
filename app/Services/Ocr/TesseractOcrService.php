@@ -4,6 +4,7 @@ namespace FidestIA\Services\Ocr;
 use FidestIA\Contracts\{OcrEngineInterface,PdfToImageConverterInterface};
 use FidestIA\Core\ProcessRunner;
 use RuntimeException;
+use Throwable;
 
 final class TesseractOcrService implements OcrEngineInterface
 {
@@ -13,7 +14,9 @@ final class TesseractOcrService implements OcrEngineInterface
         private readonly ?PdfToImageConverterInterface $pdfConverter=null,
         private readonly ?ImagePreprocessor $preprocessor=null,
         private readonly ?ProcessRunner $runner=null,
-        private readonly int $ompThreadLimit=1
+        private readonly int $ompThreadLimit=1,
+        private readonly ?string $lockFile=null,
+        private readonly int $lockWaitSeconds=2
     ) {}
 
     public function extract(string $absolutePath,string $mimeType):array
@@ -29,6 +32,7 @@ final class TesseractOcrService implements OcrEngineInterface
         }
 
         $texts=[]; $prepared=[];
+        $lockHandle=$this->acquireLock();
         try {
             foreach($pages as $index=>$page){
                 $input=$this->preprocessor?->prepare($page)??$page;
@@ -45,6 +49,7 @@ final class TesseractOcrService implements OcrEngineInterface
                 'omp_thread_limit'=>$this->ompThreadLimit,'confidence_method'=>'deterministic_text_quality_heuristic'
             ]];
         } finally {
+            if(is_resource($lockHandle)){ @flock($lockHandle, LOCK_UN); @fclose($lockHandle); }
             foreach($prepared as $file) @unlink($file);
             if($temporaryDirectory){ foreach(glob($temporaryDirectory.'/*')?:[] as $file) if(is_file($file)) @unlink($file); @rmdir($temporaryDirectory); }
         }
@@ -52,7 +57,10 @@ final class TesseractOcrService implements OcrEngineInterface
 
     public function available():bool
     {
-        if(str_contains($this->binary,'/')) return is_file($this->binary)&&is_executable($this->binary);
+        if(str_contains($this->binary,'/')) {
+            if(!is_file($this->binary)||!is_executable($this->binary)) return false;
+            try{$r=$this->process()->run([$this->binary,'--version']);return $r['exit_code']===0;}catch(Throwable){return false;}
+        }
         try{$r=$this->process()->run(['sh','-c','command -v "$1"','fidest',$this->binary]);return $r['exit_code']===0&&trim($r['stdout'])!=='';}catch(\Throwable){return false;}
     }
     public function engineName():string{return 'tesseract';}
@@ -66,6 +74,21 @@ final class TesseractOcrService implements OcrEngineInterface
             throw new RuntimeException('Échec OCR Tesseract : '.$detail);
         }
         return trim($result['stdout']);
+    }
+    private function acquireLock()
+    {
+        if(!$this->lockFile) return null;
+        $dir=dirname($this->lockFile);
+        if(!is_dir($dir) && !@mkdir($dir,0700,true) && !is_dir($dir)) throw new RuntimeException('Impossible de préparer le verrou OCR.');
+        $handle=@fopen($this->lockFile,'c');
+        if(!is_resource($handle)) throw new RuntimeException('Impossible d’ouvrir le verrou OCR.');
+        $started=microtime(true);
+        do {
+            if(@flock($handle,LOCK_EX|LOCK_NB)) return $handle;
+            usleep(100000);
+        } while(microtime(true)-$started < max(0,$this->lockWaitSeconds));
+        @fclose($handle);
+        throw new RuntimeException('OCR_BUSY: un autre document est déjà en cours de traitement. Réessayez dans quelques secondes.');
     }
     private function process():ProcessRunner{return $this->runner??new ProcessRunner(120);}
     private function estimateConfidence(array $pages):?float{$text=implode('',array_column($pages,'text'));if(trim($text)==='')return 0.0;$length=mb_strlen($text);$valid=mb_strlen(preg_replace('/[^\pL\pN\pP\pZ\r\n]/u','',$text)??'');$quality=$valid/max(1,$length);$lengthFactor=min(1,$length/250);return round(min(.92,max(.25,($quality*.65)+($lengthFactor*.27))),2);}
