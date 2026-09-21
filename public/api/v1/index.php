@@ -24,6 +24,7 @@ try{
     $db=Database::connection($config);$documents=new DocumentRepository($db);$rules=new ValidationRuleRepository($db);
     if($method==='GET'&&$route==='/health')respond(200,['success'=>true,'data'=>['service'=>'FIDEST IA','api_version'=>'v1','status'=>'ok'],'meta'=>['request_id'=>$requestId]]);
     $scope=match(true){
+        $route==='/ocr/status'&&$method==='GET'=>'documents:analyze',
         $route==='/ocr'&&$method==='POST'=>'documents:analyze',
         preg_match('#^/documents/[0-9a-f-]{36}/ocr$#i',$route)===1=>'documents:read',
         ($route==='/documents/analyze'||($route==='/documents'&&$method==='POST'))=>'documents:analyze',
@@ -36,6 +37,16 @@ try{
         default=>throw new ApiException(404,'NOT_FOUND','Route API introuvable.')
     };
     $client=ApiAuth::authenticate($config,$db,$scope);
+
+    if($route==='/ocr/status'&&$method==='GET'){
+        try{
+            $engine=(new OcrEngineFactory($config,$root))->create();
+            $state=method_exists($engine,'availabilityStatus')?$engine->availabilityStatus():['status'=>'available','available'=>true,'busy'=>false,'message'=>'FIDEST IA est disponible.'];
+            respond(200,['success'=>true,'data'=>['ocr'=>$state],'meta'=>['request_id'=>$requestId]]);
+        }catch(Throwable $e){
+            respond(200,['success'=>true,'data'=>['ocr'=>['status'=>'unavailable','available'=>false,'busy'=>false,'message'=>'Le moteur OCR est indisponible.']],'meta'=>['request_id'=>$requestId]]);
+        }
+    }
 
     if($route==='/documents'&&$method==='GET')respond(200,['success'=>true,'data'=>$documents->search(['q'=>trim((string)($_GET['q']??'')),'status'=>trim((string)($_GET['status']??''))],min(100,max(1,(int)($_GET['limit']??50)))),'meta'=>['request_id'=>$requestId]]);
 
@@ -69,7 +80,7 @@ try{
         $service=new DocumentAnalysisService(new DocumentStorageService($config['storage']['documents_path']),(new OcrEngineFactory($config,$root))->create(),new DocumentExtractionService(),new DocumentClassifierService(),new ValidationEngine($documents),$documents,$rules);
         $result=$service->analyze($_FILES['document'],trim((string)($_POST['document_type']??'AUTO'))?:'AUTO',isset($_POST['client_reference'])?trim((string)$_POST['client_reference']):null,$client['id']??null);$documentUuid=$result['uuid'];respond(200,['success'=>true,'data'=>$result,'meta'=>['request_id'=>$requestId]]);
     }
-}catch(ApiException $e){$status=$e->status;$errorCode=$e->errorCode;respond($status,['success'=>false,'error'=>['code'=>$errorCode,'message'=>$e->getMessage()],'meta'=>['request_id'=>$requestId]]);}catch(RuntimeException $e){$status=422;$errorCode='OCR_FAILED';respond(422,['success'=>false,'error'=>['code'=>$errorCode,'message'=>$e->getMessage()],'meta'=>['request_id'=>$requestId]]);}catch(Throwable $e){$status=500;$errorCode='INTERNAL_ERROR';$message=($config['app']['debug']??false)?$e->getMessage():'Une erreur interne est survenue.';respond(500,['success'=>false,'error'=>['code'=>$errorCode,'message'=>$message],'meta'=>['request_id'=>$requestId]]);}
+}catch(ApiException $e){$status=$e->status;$errorCode=$e->errorCode;respond($status,['success'=>false,'error'=>['code'=>$errorCode,'message'=>$e->getMessage()],'meta'=>['request_id'=>$requestId]]);}catch(RuntimeException $e){$busy=str_starts_with($e->getMessage(),'OCR_BUSY:');$status=$busy?409:422;$errorCode=$busy?'OCR_BUSY':'OCR_FAILED';$message=$busy?'Je suis occupée en ce moment. Merci de patienter.':$e->getMessage();respond($status,['success'=>false,'error'=>['code'=>$errorCode,'message'=>$message],'meta'=>['request_id'=>$requestId]]);}catch(Throwable $e){$status=500;$errorCode='INTERNAL_ERROR';$message=($config['app']['debug']??false)?$e->getMessage():'Une erreur interne est survenue.';respond(500,['success'=>false,'error'=>['code'=>$errorCode,'message'=>$message],'meta'=>['request_id'=>$requestId]]);}
 function validateUploadedDocument(array $config):void{if(!isset($_FILES['document']))throw new ApiException(422,'FILE_REQUIRED','Le champ document est requis.');$max=(int)($config['storage']['max_upload_mb']??15);if((int)($_FILES['document']['size']??0)>$max*1048576)throw new ApiException(422,'FILE_TOO_LARGE',"Taille maximale : $max Mo.");if((int)($_FILES['document']['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK)throw new ApiException(422,'INVALID_DOCUMENT','Téléversement du document invalide.');}
 function assertDocumentAccess(array $doc,array $client):void{if(($client['type']??'')==='master')return;$owner=$doc['api_client_id']??null;if($owner===null||(int)$owner!==(int)($client['id']??0))throw new ApiException(403,'DOCUMENT_ACCESS_DENIED','Cette application ne peut pas accéder à ce document.');}
 function respond(int $code,array $body):never{global $db,$client,$requestId,$method,$route,$started,$documentUuid,$errorCode;$status=$code;try{if(isset($db))(new ApiLogRepository($db))->record(['api_client_id'=>$client['id']??null,'request_id'=>$requestId,'method'=>$method,'route'=>$route,'status_code'=>$code,'duration_ms'=>(int)((microtime(true)-$started)*1000),'ip_address'=>$_SERVER['REMOTE_ADDR']??null,'user_agent'=>mb_substr((string)($_SERVER['HTTP_USER_AGENT']??''),0,500),'document_uuid'=>$documentUuid,'error_code'=>$errorCode]);}catch(Throwable){}while(ob_get_level()>0)ob_end_clean();http_response_code($code);header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');echo json_encode($body,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);exit;}

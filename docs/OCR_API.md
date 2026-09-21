@@ -83,3 +83,30 @@ curl 'https://ia.fidest.ci/api/v1/documents/4c1a3e69-376c-4941-9898-98d27824237a
 - fichiers stockés hors exposition publique directe.
 
 Codes d'erreur usuels : `FILE_REQUIRED`, `FILE_TOO_LARGE`, `INVALID_DOCUMENT`, `INVALID_OCR_LANGUAGE`, `INVALID_API_KEY`, `DOCUMENT_NOT_FOUND`, `DOCUMENT_ACCESS_DENIED`, `OCR_FAILED`, `RATE_LIMIT_EXCEEDED` et `INTERNAL_ERROR`.
+
+
+## Disponibilité du moteur OCR
+
+Avant d'envoyer un document, une application cliente peut interroger :
+
+```http
+GET /api/v1/ocr/status
+Authorization: Bearer <clé avec documents:analyze>
+Accept: application/json
+```
+
+Réponse disponible :
+
+```json
+{"success":true,"data":{"ocr":{"status":"available","available":true,"busy":false,"message":"FIDEST IA est disponible."}}}
+```
+
+Pendant le traitement d'un autre document :
+
+```json
+{"success":true,"data":{"ocr":{"status":"busy","available":false,"busy":true,"message":"Je suis occupée en ce moment. Merci de patienter."}}}
+```
+
+Si Tesseract n'est pas opérationnel, `status` vaut `unavailable`. Dans ce cas le client ne doit pas envoyer le document.
+
+FIDEST IA n'exécute qu'un seul OCR à la fois lorsque `OCR_SHARED_HOSTING_MODE=true`. Si deux clients démarrent simultanément malgré le contrôle préalable, le second reçoit HTTP `409` avec `error.code=OCR_BUSY`. Le client doit conserver son formulaire, afficher un loader et réinterroger `/ocr/status` après 2 à 3 secondes. Il ne doit pas renvoyer automatiquement le fichier tant que `status` n'est pas `available`.

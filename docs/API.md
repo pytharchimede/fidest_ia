@@ -17,6 +17,7 @@ GET  /api/v1/documents/{uuid}/analysis
 GET  /api/v1/document-types
 POST /api/v1/document-types
 GET  /api/v1/health
+GET  /api/v1/ocr/status
 GET  /api/v1/documents
 GET  /api/v1/documents/{uuid}
 GET  /api/v1/validation-rules
@@ -303,3 +304,8 @@ PDF. Une erreur HTTP peut néanmoins contenir un JSON utile : toujours décoder
 le corps avant de décider d'une nouvelle tentative. Réessayer avec temporisation
 progressive uniquement pour `429` et les erreurs `5xx`, jamais automatiquement
 pour `401`, `403` ou `422`.
+
+
+## État d'occupation OCR
+
+`GET /api/v1/ocr/status` permet aux applications clientes de savoir si le moteur est `available`, `busy` ou `unavailable`. En mode mutualisé, un seul document est analysé à la fois. Un POST concurrent reçoit HTTP `409` avec le code `OCR_BUSY`. Les clients doivent alors patienter et interroger le statut, plutôt que multiplier les traitements lourds.
