@@ -61,6 +61,12 @@ $config = [
         'lock_file' => (string) Env::get('OCR_LOCK_FILE', __DIR__ . '/storage/locks/ocr.lock'),
         'lock_wait_seconds' => max(0, (int) Env::get('OCR_LOCK_WAIT_SECONDS', 2)),
     ],
+    'resources' => [
+        'guard_enabled' => Env::bool('SERVER_RESOURCE_GUARD', true),
+        'max_load_per_cpu' => max(0.10, (float) Env::get('SERVER_MAX_LOAD_PER_CPU', 1.20)),
+        'max_memory_percent' => max(1, min(100, (int) Env::get('SERVER_MAX_MEMORY_PERCENT', 85))),
+        'retry_after_seconds' => max(1, (int) Env::get('SERVER_RESOURCE_RETRY_AFTER', 15)),
+    ],
     'pdf' => [
         'converter' => (string) Env::get('PDF_CONVERTER', 'auto'),
         'poppler_binary' => (string) Env::get('PDF_POPPLER_BINARY', 'pdftoppm'),

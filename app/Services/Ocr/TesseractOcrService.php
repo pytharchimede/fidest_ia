@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace FidestIA\Services\Ocr;
 use FidestIA\Contracts\{OcrEngineInterface,PdfToImageConverterInterface};
-use FidestIA\Core\ProcessRunner;
+use FidestIA\Core\{ProcessRunner,ServerResourceGuard};
 use RuntimeException;
 use Throwable;
 
@@ -16,7 +16,8 @@ final class TesseractOcrService implements OcrEngineInterface
         private readonly ?ProcessRunner $runner=null,
         private readonly int $ompThreadLimit=1,
         private readonly ?string $lockFile=null,
-        private readonly int $lockWaitSeconds=2
+        private readonly int $lockWaitSeconds=2,
+        private readonly ?ServerResourceGuard $resourceGuard=null
     ) {}
 
     public function extract(string $absolutePath,string $mimeType):array
@@ -24,9 +25,12 @@ final class TesseractOcrService implements OcrEngineInterface
         if(!is_file($absolutePath)) throw new RuntimeException('Document introuvable pour OCR.');
         if(!$this->available()) throw new RuntimeException('Aucun moteur OCR exécutable : configurez OCR_BINARY vers Tesseract ou son runtime embarqué.');
 
+        $this->resourceGuard?->assertAvailable();
+
         $pages=[$absolutePath]; $temporaryDirectory=null; $converter=null;
         if($mimeType==='application/pdf'){
             if(!$this->pdfConverter) throw new RuntimeException('Aucun convertisseur PDF configuré.');
+            $this->resourceGuard?->assertAvailable();
             $converted=$this->pdfConverter->convert($absolutePath);
             $pages=$converted['pages']; $temporaryDirectory=$converted['temporary_directory']; $converter=$converted['converter'];
         }
@@ -35,6 +39,7 @@ final class TesseractOcrService implements OcrEngineInterface
         $lockHandle=$this->acquireLock();
         try {
             foreach($pages as $index=>$page){
+                $this->resourceGuard?->assertAvailable();
                 $input=$this->preprocessor?->prepare($page)??$page;
                 if($input!==$page) $prepared[]=$input;
                 $text=$this->ocrImage($input);
@@ -67,22 +72,29 @@ final class TesseractOcrService implements OcrEngineInterface
 
     public function availabilityStatus():array
     {
-        if(!$this->available()) return ['status'=>'unavailable','available'=>false,'busy'=>false,'message'=>'Le moteur OCR est indisponible.'];
-        if(!$this->lockFile) return ['status'=>'available','available'=>true,'busy'=>false,'message'=>'FIDEST IA est disponible.'];
+        if(!$this->available()) return ['status'=>'unavailable','available'=>false,'busy'=>false,'paused'=>false,'message'=>'Le moteur OCR est indisponible.','retry_after'=>0];
+
+        if($this->resourceGuard){
+            $resourceState=$this->resourceGuard->status();
+            if(!($resourceState['available']??false)) return $resourceState;
+        }
+
+        if(!$this->lockFile) return ['status'=>'available','available'=>true,'busy'=>false,'paused'=>false,'message'=>'FIDEST IA est disponible.','retry_after'=>0];
         $dir=dirname($this->lockFile);
-        if(!is_dir($dir) && !@mkdir($dir,0700,true) && !is_dir($dir)) return ['status'=>'unavailable','available'=>false,'busy'=>false,'message'=>'Le verrou OCR est indisponible.'];
+        if(!is_dir($dir) && !@mkdir($dir,0700,true) && !is_dir($dir)) return ['status'=>'unavailable','available'=>false,'busy'=>false,'paused'=>false,'message'=>'Le verrou OCR est indisponible.','retry_after'=>0];
         $handle=@fopen($this->lockFile,'c');
-        if(!is_resource($handle)) return ['status'=>'unavailable','available'=>false,'busy'=>false,'message'=>'Le verrou OCR est indisponible.'];
+        if(!is_resource($handle)) return ['status'=>'unavailable','available'=>false,'busy'=>false,'paused'=>false,'message'=>'Le verrou OCR est indisponible.','retry_after'=>0];
         $free=@flock($handle,LOCK_EX|LOCK_NB);
         if($free) @flock($handle,LOCK_UN);
         @fclose($handle);
         return $free
-            ? ['status'=>'available','available'=>true,'busy'=>false,'message'=>'FIDEST IA est disponible.']
-            : ['status'=>'busy','available'=>false,'busy'=>true,'message'=>'Je suis occupée en ce moment. Merci de patienter.'];
+            ? ['status'=>'available','available'=>true,'busy'=>false,'paused'=>false,'message'=>'FIDEST IA est disponible.','retry_after'=>0]
+            : ['status'=>'busy','available'=>false,'busy'=>true,'paused'=>false,'message'=>'Je suis occupée en ce moment. Merci de patienter.','retry_after'=>3];
     }
 
     private function ocrImage(string $path):string
     {
+        $this->resourceGuard?->assertAvailable();
         $env=['OMP_THREAD_LIMIT'=>(string)max(1,$this->ompThreadLimit),'OMP_NUM_THREADS'=>(string)max(1,$this->ompThreadLimit)];
         $result=$this->process()->run([$this->binary,$path,'stdout','-l',$this->languages,'--psm','6'],$env);
         if($result['exit_code']!==0) {
@@ -100,6 +112,7 @@ final class TesseractOcrService implements OcrEngineInterface
         if(!is_resource($handle)) throw new RuntimeException('Impossible d’ouvrir le verrou OCR.');
         $started=microtime(true);
         do {
+            $this->resourceGuard?->assertAvailable();
             if(@flock($handle,LOCK_EX|LOCK_NB)) return $handle;
             usleep(100000);
         } while(microtime(true)-$started < max(0,$this->lockWaitSeconds));

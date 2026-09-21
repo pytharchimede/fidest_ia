@@ -105,9 +105,18 @@ try {
 
     jsonResponse($result);
 } catch (Throwable $e) {
+    $message = $e->getMessage();
+    $resourceBusy = str_starts_with($message, 'OCR_RESOURCE_BUSY:');
+    $busy = $resourceBusy || str_starts_with($message, 'OCR_BUSY:');
+    if ($resourceBusy) {
+        header('Retry-After: ' . max(1, (int) ($config['resources']['retry_after_seconds'] ?? 15)));
+    }
     jsonResponse([
         'success' => false,
-        'error' => $e->getMessage(),
-        'error_code' => 'DOCUMENT_ANALYSIS_FAILED',
-    ], 422);
+        'error' => $resourceBusy
+            ? 'FIDEST IA est temporairement en pause pour protéger les ressources du serveur. Merci de patienter.'
+            : ($busy ? 'Je suis occupée en ce moment. Merci de patienter.' : $message),
+        'error_code' => $resourceBusy ? 'OCR_RESOURCE_BUSY' : ($busy ? 'OCR_BUSY' : 'DOCUMENT_ANALYSIS_FAILED'),
+        'retry_after' => $resourceBusy ? max(1, (int) ($config['resources']['retry_after_seconds'] ?? 15)) : null,
+    ], $busy ? 409 : 422);
 }

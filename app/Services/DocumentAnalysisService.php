@@ -33,6 +33,16 @@ final class DocumentAnalysisService
             throw new RuntimeException('Type de document inconnu ou inactif.');
         }
 
+        if (method_exists($this->ocr, 'availabilityStatus')) {
+            $state = $this->ocr->availabilityStatus();
+            if (($state['status'] ?? '') === 'paused') {
+                throw new RuntimeException('OCR_RESOURCE_BUSY: ressources serveur momentanément élevées. Réessayez dans quelques secondes.');
+            }
+            if (($state['status'] ?? '') === 'busy') {
+                throw new RuntimeException('OCR_BUSY: un autre document est déjà en cours de traitement. Réessayez dans quelques secondes.');
+            }
+        }
+
         $stored = $this->storage->store($file);
         $uuid = $this->uuidV4();
 

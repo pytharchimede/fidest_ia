@@ -110,3 +110,28 @@ Pendant le traitement d'un autre document :
 Si Tesseract n'est pas opérationnel, `status` vaut `unavailable`. Dans ce cas le client ne doit pas envoyer le document.
 
 FIDEST IA n'exécute qu'un seul OCR à la fois lorsque `OCR_SHARED_HOSTING_MODE=true`. Si deux clients démarrent simultanément malgré le contrôle préalable, le second reçoit HTTP `409` avec `error.code=OCR_BUSY`. Le client doit conserver son formulaire, afficher un loader et réinterroger `/ocr/status` après 2 à 3 secondes. Il ne doit pas renvoyer automatiquement le fichier tant que `status` n'est pas `available`.
+
+
+## Pause protectrice liée aux ressources serveur
+
+Le statut OCR peut aussi retourner :
+
+```json
+{
+  "success": true,
+  "data": {
+    "ocr": {
+      "status": "paused",
+      "available": false,
+      "busy": true,
+      "paused": true,
+      "message": "FIDEST IA est temporairement en pause pour protéger les ressources du serveur. Merci de patienter.",
+      "retry_after": 15
+    }
+  }
+}
+```
+
+Cet état signifie que FIDEST IA a détecté une charge CPU ou mémoire élevée. Aucun nouveau Tesseract/Ghostscript n'est démarré tant que les ressources ne sont pas revenues sous les seuils configurés.
+
+Un POST reçu dans cet état retourne HTTP `409`, `error.code=OCR_RESOURCE_BUSY` et un en-tête `Retry-After`. Le client doit attendre puis interroger de nouveau `/ocr/status`.
