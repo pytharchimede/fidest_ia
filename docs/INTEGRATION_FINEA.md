@@ -98,3 +98,40 @@ réessayer avec temporisation progressive.
 
 Le contrôle ne constitue pas une validation juridique d'authenticité sans
 interrogation d'un service officiel.
+
+
+## 6. Gestion de l'occupation OCR dans FINEA
+
+FINEA doit vérifier `GET /api/v1/ocr/status` avant d'envoyer un document.
+
+Comportement d'interface recommandé :
+
+- `available` : afficher « IA disponible » puis autoriser l'analyse ;
+- `busy` : afficher « Je suis occupée en ce moment. Merci de patienter. », désactiver le bouton d'analyse et afficher un loader ;
+- pendant `busy`, interroger `/api/v1/ocr/status` toutes les 3 secondes ;
+- dès que l'état redevient `available`, réactiver le bouton et poursuivre l'envoi du document ;
+- `unavailable` : afficher « Service OCR temporairement indisponible » et ne pas envoyer le fichier.
+
+Le contrôle préalable ne remplace pas le traitement de concurrence : si le POST `/documents/analyze` reçoit HTTP `409` avec `error.code=OCR_BUSY`, FINEA doit revenir au même état d'attente avec loader et reprendre le polling. Ne pas traiter `OCR_BUSY` comme une erreur définitive.
+
+Pseudo-flux :
+
+```text
+Utilisateur demande l'analyse
+        |
+GET /api/v1/ocr/status
+        |
+  +-----+------------------+
+  |                        |
+available                 busy
+  |                        |
+POST analyze          loader + message
+  |                        |
+résultat              polling /status 3 s
+                           |
+                       available
+                           |
+                       POST analyze
+```
+
+Le polling de statut est léger : il ne lance ni Ghostscript ni OCR de document. Un seul traitement lourd est autorisé à la fois sur l'hébergement mutualisé.
