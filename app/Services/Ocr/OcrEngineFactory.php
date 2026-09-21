@@ -40,7 +40,9 @@ final class OcrEngineFactory
             $binary,(string)($this->config['ocr']['languages']??'fra+eng'),
             $this->converter(),$preprocessor,
             new ProcessRunner((int)($this->config['ocr']['timeout']??120)),
-            (int)($this->config['ocr']['omp_thread_limit']??1)
+            (int)($this->config['ocr']['omp_thread_limit']??1),
+            $shared ? (string)($this->config['ocr']['lock_file']??$this->rootPath.'/storage/locks/ocr.lock') : null,
+            (int)($this->config['ocr']['lock_wait_seconds']??2)
         );
     }
 
